@@ -1,6 +1,6 @@
-from dataclasses import dataclass, field
 from datetime import datetime
-from core.utils import utcnow_naive
+from dataclasses import dataclass, field
+from core.utils import utcnow
 
 @dataclass
 class User:
@@ -12,5 +12,5 @@ class User:
     tg_id: int
     username: str | None
     id: int | None = None
-    created_at: datetime = field(default_factory=utcnow_naive)
+    created_at: datetime = field(default_factory=utcnow)
     is_blocked: bool = False

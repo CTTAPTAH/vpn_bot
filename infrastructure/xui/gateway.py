@@ -13,8 +13,13 @@ Application слой ничего не знает про XUI.
 from datetime import datetime
 
 from application.ports.vpn_gateway import VpnGateway, VpnKey
+from application.errors.vpn_errors import (
+    VpnClientAlreadyExistsError,
+    VpnGatewayError,
+)
 from infrastructure.xui.api_client import XuiApiClient
 from infrastructure.xui.models import Client as XuiClient
+from infrastructure.xui.exceptions import XuiClientAlreadyExistsError
 from core.utils import datetime_to_ms, ms_to_datetime
 
 class XuiVpnGateway(VpnGateway):
@@ -33,12 +38,17 @@ class XuiVpnGateway(VpnGateway):
         """Создаёт ключ в XUI."""
         expiry_ms = datetime_to_ms(expires_at)
 
-        await self._xui.add_client(
-            inbound_name=self._inbound_name,
-            email=email,
-            expiry_time=expiry_ms,
-            enable=True
-        )
+        try:
+            await self._xui.add_client(
+                inbound_name=self._inbound_name,
+                email=email,
+                expiry_time=expiry_ms,
+                enable=True
+            )
+        except XuiClientAlreadyExistsError as e:
+            raise VpnClientAlreadyExistsError from e
+        except Exception as e:
+            raise VpnGatewayError from e
 
         return await self.get_key(email)
 
@@ -91,12 +101,18 @@ class XuiVpnGateway(VpnGateway):
 
         return self._map_to_dto(client)
 
-    async def get_link(self, email: str) -> str:
+    async def get_link(self, email: str, server_name: str) -> str:
         """Возвращает VLESS ссылку для клиента."""
-        return await self._xui.get_client_link(
-            email=email,
-            inbound_name=self._inbound_name
-        )
+        try:
+            return await self._xui.get_client_link(
+                email=email,
+                inbound_name=self._inbound_name,
+                server_name=server_name
+            )
+        except XuiClientAlreadyExistsError as e:
+            raise VpnClientAlreadyExistsError from e
+        except Exception as e:
+            raise VpnGatewayError from e
 
     # Приватный метод
     def _map_to_dto(self, client: XuiClient) -> VpnKey:

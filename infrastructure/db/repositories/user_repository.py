@@ -78,9 +78,7 @@ class SQLAlchemyUserRepository(AbstractUserRepository):
 
     # Обновление данных
     async def update(self, user: DomainUser) -> None:
-        stmt = select(ORMUser).where(ORMUser.id == user.id)
-        result = await self._session.execute(stmt)
-        orm_user = result.scalar_one_or_none()
+        orm_user = await self._session.get(ORMUser, user.id)
 
         if orm_user is None:
             raise ValueError("User not found")

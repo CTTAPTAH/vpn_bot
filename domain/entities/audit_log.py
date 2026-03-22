@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from core.utils import utcnow_naive
+from core.utils import utcnow
 from domain.enums import AuditLevel, AuditEventType
 
 @dataclass
@@ -13,6 +13,5 @@ class AuditLog:
     level: AuditLevel
     event_type: AuditEventType
     message: str
-    created_at: datetime = field(default_factory=utcnow_naive)
+    created_at: datetime = field(default_factory=utcnow)
     id: int | None = None
-    context: dict | None = None

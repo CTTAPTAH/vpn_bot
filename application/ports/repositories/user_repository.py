@@ -17,7 +17,7 @@ class AbstractUserRepository(ABC):
         ...
 
     @abstractmethod
-    async def get_or_create(self, tg_id: int, username: str) -> User:
+    async def get_or_create(self, tg_id: int, username: str | None) -> User:
         ...
 
     @abstractmethod

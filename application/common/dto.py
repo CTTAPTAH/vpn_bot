@@ -18,3 +18,11 @@ class KeyDTO:
     plan_name: str
     end_at: datetime
     is_expired: bool
+
+@dataclass
+class PlanDTO:
+    """Информация о тарифе."""
+    id: int
+    name: str
+    price: int
+    duration_months: int

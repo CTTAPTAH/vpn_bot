@@ -49,7 +49,7 @@ def kb_main(has_trial: bool = False) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text="🎁 Пробный период", callback_data=Screen.TRIAL)])
 
     buttons.append(
-        [InlineKeyboardButton(text="📱 Как подключить VPN", callback_data=Screen.INSTRUCTION)]
+        [InlineKeyboardButton(text="📱 Как настроить защищённое подключение", callback_data=Screen.INSTRUCTION)]
     )
     buttons.append([BTN_HELP])
 
@@ -57,15 +57,24 @@ def kb_main(has_trial: bool = False) -> InlineKeyboardMarkup:
 
 # Тарифы, покупка
 def kb_plans(action: enums.PaymentAction, plans: list[PlanDTO],
-             *, key_id: int | None = None) -> InlineKeyboardMarkup:
+             pending_payment_id: int, *, key_id: int | None = None) -> InlineKeyboardMarkup:
     buttons = []
+
     for plan in plans:
-        presentation = PLAN_PRESENTATION_BY_MONTHS.get(plan.duration_month, PlanPresentation("", ""))
+        presentation = PLAN_PRESENTATION_BY_MONTHS.get(plan.duration_months, PlanPresentation("", ""))
         text = f"{presentation.emoji} {plan.name} — {plan.price} ₽"
         buttons.append([InlineKeyboardButton(
                 text=text,
                 callback_data=callbacks.PurchasePendingCallback(action=action, plan_id=plan.id, key_id=key_id).pack()
             )])
+    if pending_payment_id is not None:
+        buttons.append([InlineKeyboardButton(
+            text="💳 Продолжить оплату",
+            callback_data=callbacks.PurchasePendingCallback(
+                action=action,
+                plan_id=pending_payment_id,
+                key_id=key_id).pack()
+        )])
     buttons.append([BTN_BACK])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -265,7 +274,7 @@ def kb_second_method_android() -> InlineKeyboardMarkup:
 # WINDOWS
 def kb_windows() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="VPN для избранных приложений/сайтов", callback_data=Screen.PC_APPS)],
+        [InlineKeyboardButton(text="Защищённое подключение для отдельных приложений/сайтов", callback_data=Screen.PC_APPS)],
         [BTN_MY_KEYS],
         [BTN_HELP],
         [BTN_BACK]

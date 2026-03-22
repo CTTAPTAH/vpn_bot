@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from core.utils import utcnow_naive
+from core.utils import utcnow
 
 @dataclass
 class AccessKey:
@@ -12,6 +12,6 @@ class AccessKey:
     user_id: int
     plan_id: int
     end_at: datetime
-    price_at_purchase: int
     id: int | None = None
-    start_at: datetime = field(default_factory=utcnow_naive)
+    start_at: datetime = field(default_factory=utcnow)
+    vless_link: str | None = None

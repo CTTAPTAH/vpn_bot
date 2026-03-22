@@ -18,7 +18,7 @@ class Client:
     email: str
     inbound_id: int
     enabled: bool
-    expiry_time: int = 0 # ms
+    expiry_time: int | None = None # ms
 
     @classmethod
     def from_dict(cls, data: dict, inbound_id: int):
@@ -30,14 +30,14 @@ class Client:
             uuid=data.get("uuid"),
             email=data.get("email"),
             inbound_id=inbound_id,
-            enabled=data.get("enable", True),
+            enabled=bool(data.get("enable", True)),
             expiry_time=data.get("expiryTime", 0),
         )
 
     def is_expired(self) -> bool:
-        if not self.expiry_time:
+        if self.expiry_time is None or self.expiry_time == 0:
             return False
-        return time.time() * 1000 > self.expiry_time
+        return int(time.time() * 1000) >= self.expiry_time
 
 @dataclass
 class Inbound:
@@ -66,7 +66,7 @@ class Inbound:
         return cls(
             id=inbound_id,
             remark=data.get("remark", ""),
-            port=data.get("port"),
+            port=int(data.get("port")),
             protocol=data.get("protocol"),
             enabled=data.get("enable", True),
             stream_settings_raw=data.get("streamSettings", ""),
@@ -76,4 +76,7 @@ class Inbound:
     def get_stream_settings(self) -> dict:
         if not self.stream_settings_raw:
             return {}
-        return json.loads(self.stream_settings_raw)
+        try:
+            return json.loads(self.stream_settings_raw)
+        except Exception as e:
+            raise XuiInvalidResponseError("Invalid streamSettings JSON") from e

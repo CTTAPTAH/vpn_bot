@@ -1,134 +1,169 @@
 """Backend-логика продление ключа пользователя временем пробного периода."""
 from dataclasses import dataclass
 from enum import StrEnum
-from uuid import uuid4
 from datetime import datetime, timedelta
 
 from application.ports.unit_of_work import AbstractUnitOfWork
 from application.ports.vpn_gateway import VpnGateway
 from domain.entities.audit_log import AuditLog
 from domain.entities.access_key import AccessKey
-from domain.entities.user import User
-from domain.entities.plan import Plan
 from domain.entities.payment import Payment
 from domain.enums import AuditLevel, AuditEventType, PaymentType, PaymentAction, PaymentProvider, PaymentStatus
 import core.utils as utils
 
 class ExtendTrialErrorType(StrEnum):
-    """Тип ошибки во время продления ключе пробным периодом."""
-    KEY_NOT_FOUND_IN_DB = "KEY_NOT_FOUND_IN_DB"
-    KEY_NOT_FOUND_IN_XUI = "KEY_NOT_FOUND_IN_XUI"
-    PAYMENT_NOT_OWNED = "PAYMENT_NOT_OWNED"
+    KEY_NOT_FOUND = "KEY_NOT_FOUND"
+    KEY_NOT_OWNED = "KEY_NOT_OWNED"
+    TRIAL_PLAN_NOT_FOUND = "TRIAL_PLAN_NOT_FOUND"
+    VPN_SYNC_FAILED = "VPN_SYNC_FAILED"
     UNKNOWN_ERROR = "UNKNOWN_ERROR"
 
+@dataclass
 class ExtendTrialResult:
-    """Базовый класс для результатов: ошибка или успех."""
-    pass
-
-@dataclass
-class ExtendTrialSuccess(ExtendTrialResult):
-    key_name: str
-    num_days: int
-
-@dataclass
-class ExtendTrialError(ExtendTrialResult):
-    error_type: ExtendTrialErrorType
+    success: bool
+    error: ExtendTrialErrorType | None = None
+    plan_name: str | None = None
+    num_days: int | None = None
 
 class ExtendTrialUseCase:
-    """Сценарий продления выбранного ключа пробным периодом."""
+    """Сценарий выдачи/возврата результата пробного периода."""
     def __init__(self, uow: AbstractUnitOfWork, vpn: VpnGateway):
         self._uow = uow
         self._vpn = vpn
-
-    async def _create_trial_payment(self, uow: AbstractUnitOfWork, user: User,
-                                    plan: Plan, key: AccessKey, now: datetime) -> Payment:
-        """Создаёт платеж для идемпотентности пробного периода."""
-        payment = Payment(
-            user_id=user.id,
-            plan_id=plan.id,
-            price=plan.price,
-            type=PaymentType.TRIAL,
-            action=PaymentAction.RENEW,
-            provider=PaymentProvider.INTERNAL,
-            provider_payment_id=str(uuid4()),
-            status=PaymentStatus.COMPLETED,
-            key_id=key.id,
-            created_at=now,
-            granted_at=now,
-            paid_at=now
-        )
-        await uow.payments.add(payment)
-        return payment
-
-    async def _sync_key_with_xui(self, uow: AbstractUnitOfWork, key: AccessKey,
-                            payment: Payment, expiry_time: datetime) -> ExtendTrialErrorType | None:
-        """Создаёт ключ в XUI и логирует ошибки."""
-        vpn_email = str(key.id)
-        try:
-            if not await self._vpn.is_client_exists(vpn_email):
-                await uow.audits.add(
-                    AuditLog(
-                        level=AuditLevel.ERROR,
-                        event_type=AuditEventType.XUI_UPDATE,
-                        message=f"Ключ не найден в XUI. Не удалось продлить доступ через пробный период.\n"
-                                f"user_id={key.user_id}, key_id={key.id}, payment_id={payment.id}"
-                    )
-                )
-                return ExtendTrialErrorType.KEY_NOT_FOUND_IN_XUI
-
-            await self._vpn.update_expiry(vpn_email, expiry_time)
-        except Exception as e:
-            await uow.audits.add(
-                AuditLog(
-                    level=AuditLevel.ERROR,
-                    event_type=AuditEventType.XUI_UPDATE,
-                    message=f"Ошибка продления ключа в XUI.\n"
-                            f"user_id={key.user_id}, key_id={key.id}, payment_id={payment.id}, Ошибка: {e}"
-                )
-            )
-            return ExtendTrialErrorType.UNKNOWN_ERROR
-
-        return None
 
     async def execute(self, tg_id: int, username: str, key_id: int) -> ExtendTrialResult:
         """Продлить пробный период."""
         async with self._uow as uow:
             user = await uow.users.get_or_create(tg_id, username)
-            payment = await uow.payments.get_user_trial(user.id)
-            plan = await uow.plans.get_trial()
-            key = await uow.keys.get_by_id(key_id)
 
+            key = await uow.keys.get_by_id(key_id)
             if key is None:
-                await uow.audits.add(
-                    AuditLog(
-                        level=AuditLevel.ERROR,
-                        event_type=AuditEventType.KEY_NOT_FOUND_IN_DB,
-                        message=(
-                            f"Пользователь попытался продлить ключ за счёт пробного периода, но ключ не найден в БД.\n"
-                            f"tg_id={tg_id}."
-                        )
-                    )
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.KEY_NOT_FOUND_IN_DB,
+                    f"Не удалось продлить пробным периодом. ключ не найден. tg_id={tg_id}, key_id={key_id}"
                 )
-                return ExtendTrialError(error_type=ExtendTrialErrorType.KEY_NOT_FOUND_IN_DB)
+                return ExtendTrialResult(False, ExtendTrialErrorType.KEY_NOT_FOUND)
+
+            if key.user_id != user.id:
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.KEY_NOT_OWNED_BY_USER,
+                    f"Не удалось продлить пробным периодом. чужой ключ. user_id={user.id}, key_id={key.id}"
+                )
+                return ExtendTrialResult(False, ExtendTrialErrorType.KEY_NOT_OWNED)
+
+            plan = await uow.plans.get_trial()
+            if plan is None:
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.PLAN_NOT_FOUND,
+                    f"Пробный период не найден. user_id={user.id}"
+                )
+                return ExtendTrialResult(False, ExtendTrialErrorType.TRIAL_PLAN_NOT_FOUND)
 
             trial_days = utils.days_from_seconds(plan.duration_seconds)
 
             # Если пробного периода у пользователя не было, то продлеваем доступ
-            if payment is None:
-                now = utils.utcnow_naive()
+            trial_payment = await uow.payments.get_user_trial_for_update(user.id) # Блокируем платёж
+            if trial_payment is not None:
+                await self._audit(
+                    uow,
+                    AuditLevel.INFO,
+                    AuditEventType.TRIAL_ALREADY_GRANTED,
+                    f"Пробный период уже был выдан. user_id={user.id}"
+                )
+                return ExtendTrialResult(True, None, plan.name, trial_days)
 
-                base_time = max(key.end_at, now)
-                expiry_time = base_time + timedelta(seconds=plan.duration_seconds)
+            expiry_time = self._calculate_new_expiry(key, plan.duration_seconds)
+            await self._extend_key(uow, key, plan.id, expiry_time)
 
-                key.plan_id = plan.id
-                key.end_at = expiry_time
+            payment = await self._create_trial_payment(
+                uow,
+                user.id,
+                key.id,
+                plan.id,
+                plan.price
+            )
 
-                await uow.keys.update(key)
-                payment = await self._create_trial_payment(uow, user, plan, key, now)
+        vpn_ok = await self._sync_vpn(uow, key.id, expiry_time)
+        if not vpn_ok:
+            return ExtendTrialResult(False, ExtendTrialErrorType.VPN_SYNC_FAILED)
 
-                # Синхронизация с XUI
-                vpn_error = await self._sync_key_with_xui(uow, key, payment, expiry_time)
-                if vpn_error is not None:
-                    return ExtendTrialError(error_type=vpn_error)
+        await self._audit(
+            uow,
+            AuditLevel.INFO,
+            AuditEventType.TRIAL_GRANTED,
+            f"Пробный доступ выдан. user_id={user.id}, key_id={key.id}, payment_id={payment.id}",
+        )
 
-            return ExtendTrialSuccess(key_name=plan.name, num_days=trial_days)
+        return ExtendTrialResult(True, None, plan.name, trial_days)
+
+    async def _audit(self, uow: AbstractUnitOfWork, level: AuditLevel, event: AuditEventType, message: str) -> None:
+        await uow.audits.add(
+            AuditLog(
+                level=level,
+                event_type=event,
+                message=message,
+            )
+        )
+
+    def _calculate_new_expiry(self, key: AccessKey, duration_seconds: int) -> datetime:
+        now = utils.utcnow()
+        base_time = max(key.end_at, now)
+        return base_time + timedelta(seconds=duration_seconds)
+
+    async def _extend_key(self, uow: AbstractUnitOfWork, key: AccessKey, plan_id: int, expiry_time: datetime) -> None:
+        key.plan_id = plan_id
+        key.end_at = expiry_time
+        await uow.keys.update(key)
+
+    async def _create_trial_payment(self, uow: AbstractUnitOfWork, user_id: int,
+                                    key_id: int, plan_id: int, price: int) -> Payment:
+        now = utils.utcnow()
+
+        payment = Payment(
+            user_id=user_id,
+            plan_id=plan_id,
+            price=price,
+            type=PaymentType.TRIAL,
+            action=PaymentAction.RENEW,
+            provider=PaymentProvider.INTERNAL,
+            provider_payment_id=utils.new_uuid(),
+            status=PaymentStatus.COMPLETED,
+            key_id=key_id,
+            created_at=now,
+            granted_at=now,
+            paid_at=now,
+        )
+
+        await uow.payments.add(payment)
+        return payment
+
+    async def _sync_vpn(self, uow: AbstractUnitOfWork, key_id: int, expiry_time: datetime) -> bool:
+        try:
+            vpn_email = str(key_id)
+
+            if not await self._vpn.is_client_exists(vpn_email):
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.KEY_NOT_FOUND_IN_VPN,
+                    f"Синхронизация пробного периода с vpn не удалась. Ключ не найден. key_id={key_id}"
+                )
+                return False
+
+            await self._vpn.update_expiry(vpn_email, expiry_time)
+            return True
+
+        except Exception as e:
+            await self._audit(
+                uow,
+                AuditLevel.ERROR,
+                AuditEventType.VPN_ERROR,
+                f"Ошибка синхронизации при выдачи пробного периода. key_id={key_id}, error={e}",
+            )
+            return False

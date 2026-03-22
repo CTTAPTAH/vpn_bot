@@ -8,18 +8,18 @@ from aiogram import types
 from typing import Callable, Awaitable
 
 from app.container import get_vpn_gateway, build_uow
-from application.use_cases.main_menu import GetMainMenuUseCase
+from application.use_cases.get_main_menu import GetMainMenuUseCase
 from application.use_cases.get_available_plans import GetAvailablePlansUseCase
-from application.use_cases.create_payment import CreatePaymentUseCase, CreatePaymentError, CreatePaymentSuccess
-from application.use_cases.confirm_payment import ConfirmPaymentUseCase, ConfirmPaymentError, ConfirmPaymentSuccess
+from application.use_cases.create_payment import CreatePaymentUseCase
+from application.use_cases.confirm_payment import ConfirmPaymentUseCase
 from application.use_cases.activate_trial import (ActiveTrialUseCase, ActiveTrialError,
                                                   ActiveTrialSuccess, ActiveTrialChooseKey)
-from application.use_cases.extend_trial import ExtendTrialUseCase, ExtendTrialError, ExtendTrialSuccess
+from application.use_cases.extend_trial import ExtendTrialUseCase
 from application.use_cases.user_keys import GetUserKeysUseCase
-from application.use_cases.selected_key import GetSelectedKeyUseCase, SelectedKeyError, SelectedKeySuccess
-from application.use_cases.get_key_for_deletion import (GetKeyForDeletionUseCase, GetKeyForDeletionError,
-                                                        GetKeyForDeletionSuccess)
+from application.use_cases.selected_key import GetSelectedKeyUseCase
+from application.use_cases.get_key_for_deletion import GetKeyForDeletionUseCase
 from presentation.telegram.states.states import Screen
+from presentation.telegram.texts.branding import SERVER_NAME
 import presentation.telegram.texts.texts as texts
 import presentation.telegram.keyboards.keyboards as keyboards
 import presentation.telegram.callbacks.callbacks as callbacks
@@ -32,17 +32,22 @@ async def show_main(callback_query: types.CallbackQuery):
 
     await callback_query.message.edit_text(
         texts.txt_main(dto.active_keys),
-        reply_markup=keyboards.kb_main(not dto.has_trial)
+        reply_markup=keyboards.kb_main(not dto.trial_used)
     )
 
 # Тарифы, покупка
 async def show_plans(callback_query: types.CallbackQuery, callback_data: callbacks.PlansCallback):
     use_case = GetAvailablePlansUseCase(build_uow())
-    plans = await use_case.execute()
+    dto = await use_case.execute(callback_query.from_user.id, callback_query.from_user.username)
 
     await callback_query.message.edit_text(
-        texts.txt_plans(plans),
-        reply_markup=keyboards.kb_plans(action=callback_data.action, plans=plans, key_id=callback_data.key_id)
+        texts.txt_plans(dto.plans),
+        reply_markup=keyboards.kb_plans(
+            action=callback_data.action,
+            plans=dto.plans,
+            pending_payment_id=dto.pending_payment_id,
+            key_id=callback_data.key_id
+        )
     )
 
 async def show_purchase_pending(callback_query: types.CallbackQuery, callback_data: callbacks.PurchasePendingCallback):
@@ -55,12 +60,7 @@ async def show_purchase_pending(callback_query: types.CallbackQuery, callback_da
         plan_id=callback_data.plan_id
     )
 
-    if isinstance(result, CreatePaymentError):
-        await callback_query.message.edit_text(
-            texts.txt_unknown_error(),
-            reply_markup=keyboards.kb_error()
-        )
-    elif isinstance(result, CreatePaymentSuccess):
+    if result.success:
         if result.is_existing:
             await callback_query.message.edit_text(
                 texts.txt_existing_payment(result.plan_name, result.price),
@@ -81,6 +81,11 @@ async def show_purchase_pending(callback_query: types.CallbackQuery, callback_da
                     key_id=callback_data.key_id
                 )
             )
+    else:
+        await callback_query.message.edit_text(
+            texts.txt_unknown_error(),
+            reply_markup=keyboards.kb_error()
+        )
 
 async def show_purchase_success(callback_query: types.CallbackQuery, callback_data: callbacks.PurchaseSuccessCallback):
     use_case = ConfirmPaymentUseCase(build_uow(), get_vpn_gateway())
@@ -88,24 +93,26 @@ async def show_purchase_success(callback_query: types.CallbackQuery, callback_da
         tg_id=callback_query.from_user.id,
         username=callback_query.from_user.username,
         payment_id=callback_data.payment_id,
+        server_name=SERVER_NAME,
         key_id=callback_data.key_id
     )
 
-    if isinstance(result, ConfirmPaymentError):
-        await callback_query.message.edit_text(
-            texts.txt_unknown_error(),
-            reply_markup=keyboards.kb_error()
-        )
-    elif isinstance(result, ConfirmPaymentSuccess):
+    if result.success:
         await callback_query.message.edit_text(
             texts.txt_purchase_success(),
             reply_markup=keyboards.kb_purchase_success()
         )
+    else:
+        await callback_query.message.edit_text(
+            texts.txt_unknown_error(),
+            reply_markup=keyboards.kb_error()
+        )
+
 
 # Пробный период
 async def show_trial(callback_query: types.CallbackQuery):
     use_case = ActiveTrialUseCase(build_uow(), get_vpn_gateway())
-    result = await use_case.execute(callback_query.from_user.id, callback_query.from_user.username)
+    result = await use_case.execute(callback_query.from_user.id, callback_query.from_user.username, SERVER_NAME)
 
     if isinstance(result, ActiveTrialError):
         await callback_query.message.edit_text(
@@ -114,12 +121,12 @@ async def show_trial(callback_query: types.CallbackQuery):
         )
     elif isinstance(result, ActiveTrialSuccess):
         await callback_query.message.edit_text(
-            texts.txt_trial(result.num_days, result.vless),
+            texts.txt_trial(result.num_days, result.vless_link),
             reply_markup=keyboards.kb_trial()
         )
     elif isinstance(result, ActiveTrialChooseKey):
         await callback_query.message.edit_text(
-            texts.txt_trial_limit_reached(result.count_key),
+            texts.txt_trial_limit_reached(result.count_keys),
             reply_markup=keyboards.kb_trial_limit(result.keys)
         )
 
@@ -131,15 +138,15 @@ async def show_extend_trial(callback_query: types.CallbackQuery, callback_data: 
         key_id=callback_data.key_id
     )
 
-    if isinstance(result, ExtendTrialError):
+    if result.success:
+        await callback_query.message.edit_text(
+            texts.txt_extend_trial(result.plan_name, result.num_days),
+            reply_markup=keyboards.kb_extend_trial()
+        )
+    else:
         await callback_query.message.edit_text(
             texts.txt_unknown_error(),
             reply_markup=keyboards.kb_error()
-        )
-    elif isinstance(result, ExtendTrialSuccess):
-        await callback_query.message.edit_text(
-            texts.txt_extend_trial(result.key_name, result.num_days),
-            reply_markup=keyboards.kb_extend_trial()
         )
 
 # Мои ключи
@@ -154,34 +161,36 @@ async def show_my_keys(callback_query: types.CallbackQuery):
 
 async def show_selected_key(callback_query: types.CallbackQuery, callback_data: callbacks.SelectedKeyCallback):
     use_case = GetSelectedKeyUseCase(build_uow(), get_vpn_gateway())
-    result = await use_case.execute(callback_data.key_id, callback_query.from_user.id)
+    result = await use_case.execute(callback_data.key_id, callback_query.from_user.id, SERVER_NAME)
 
-    if isinstance(result, SelectedKeyError):
-        await callback_query.message.edit_text(
-            texts.txt_unknown_error(),
-            reply_markup=keyboards.kb_error()
-        )
-    elif isinstance(result, SelectedKeySuccess):
+    if result.success:
         await callback_query.message.edit_text(
             texts.txt_selected_key(result.key, result.vless),
             reply_markup=keyboards.kb_selected_key(result.key.id)
         )
+    else:
+        await callback_query.message.edit_text(
+            texts.txt_unknown_error(),
+            reply_markup=keyboards.kb_error()
+        )
+
 
 async def show_confirm_delete_key(callback_query: types.CallbackQuery,
                                   callback_data: callbacks.ConfirmDeleteKeyCallback):
     use_case = GetKeyForDeletionUseCase(build_uow())
     result = await use_case.execute(callback_data.key_id, callback_query.from_user.id)
 
-    if isinstance(result, GetKeyForDeletionError):
-        await callback_query.message.edit_text(
-            texts.txt_unknown_error(),
-            reply_markup=keyboards.kb_error()
-        )
-    elif isinstance(result, GetKeyForDeletionSuccess):
+    if result.success:
         await callback_query.message.edit_text(
             texts.txt_confirm_delete_key(result.key),
             reply_markup=keyboards.kb_confirm_delete_key(result.key.id)
         )
+    else:
+        await callback_query.message.edit_text(
+            texts.txt_unknown_error(),
+            reply_markup=keyboards.kb_error()
+        )
+
 
 # Поддержка
 async def show_help(callback_query: types.CallbackQuery):

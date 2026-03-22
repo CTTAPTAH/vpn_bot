@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from application.common.dto import KeyDTO
 from application.ports.unit_of_work import AbstractUnitOfWork
-from core.utils import utcnow_naive
+from core.utils import utcnow
 
 @dataclass
 class UserKeysDTO:
@@ -19,7 +19,7 @@ class GetUserKeysUseCase:
 
     async def execute(self, tg_id: int, username: str) -> UserKeysDTO:
         """Возвращает данные, необходимые для отображения информации о ключах пользователя."""
-        now = utcnow_naive()
+        now = utcnow()
 
         async with self._uow as uow:
             user = await uow.users.get_or_create(tg_id, username)

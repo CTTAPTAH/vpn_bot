@@ -65,5 +65,5 @@ class VpnGateway(ABC):
         ...
 
     @abstractmethod
-    async def get_link(self, email: str) -> str:
+    async def get_link(self, email: str, server_name: str) -> str:
         ...

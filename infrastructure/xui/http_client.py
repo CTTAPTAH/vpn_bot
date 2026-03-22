@@ -17,7 +17,6 @@ import httpx
 from infrastructure.xui.exceptions import (
     XuiConnectionError,
     XuiTimeoutError,
-    XuiRequestError,
 )
 
 class XuiHttpClient:
@@ -26,7 +25,6 @@ class XuiHttpClient:
 
     Отвечает только за транспортный уровень.
     """
-
     def __init__(self, base_url: str, timeout: float = 10) -> None:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout

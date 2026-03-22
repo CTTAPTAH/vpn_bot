@@ -14,6 +14,7 @@ class AccessKeyView:
     id: int
     plan_name: str
     end_at: datetime
+    vless_link: str
 
 class AbstractAccessKeyRepository(ABC):
     """
@@ -23,6 +24,10 @@ class AbstractAccessKeyRepository(ABC):
     """
     @abstractmethod
     async def get_by_id(self, access_key_id: int) -> AccessKey | None:
+        ...
+
+    @abstractmethod
+    async def get_for_update(self, key_id: int) -> AccessKey | None:
         ...
 
     @abstractmethod

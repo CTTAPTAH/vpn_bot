@@ -8,10 +8,7 @@
 
 Файл содержит только настройки и не должен включать бизнес-логику.
 """
-from dotenv import load_dotenv
 import os
-
-load_dotenv()
 
 def _require(value: str, name: str) -> str:
     """Функция для debug. Если не существует указанной переменной в окружении, то выпадает исключение."""
@@ -37,7 +34,7 @@ XUI_RETRY_BASE_DELAY = 1
 XUI_RETRY_MULTIPLIER = 2
 
 # HTTP client
-TIMEOUT = 10.0
+HTTP_TIMEOUT = 10.0
 
 # База данных
 DB_HOST = _require(os.getenv("DB_HOST"), "DB_HOST")

@@ -35,7 +35,7 @@ class User(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
         comment="Дата и время (UTC) регистрации пользователя."

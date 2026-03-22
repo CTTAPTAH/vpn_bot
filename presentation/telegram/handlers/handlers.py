@@ -7,7 +7,7 @@
 from aiogram import Router, types, F
 from aiogram.filters import Command
 
-from application.use_cases.main_menu import GetMainMenuUseCase
+from application.use_cases.get_main_menu import GetMainMenuUseCase
 from presentation.telegram.navigation.navigation import go_to, go_back, go_back_to
 from presentation.telegram.states.states import Screen
 from presentation.telegram.enums import Action
@@ -30,7 +30,7 @@ def register_handlers():
 
       await message.answer(
          texts.txt_main(dto.active_keys),
-         reply_markup=keyboards.kb_main(not dto.has_trial)
+         reply_markup=keyboards.kb_main(not dto.trial_used)
       )
       state_manager.push_state(message.from_user.id, Screen.MAIN)
       await message.delete()

@@ -36,7 +36,7 @@ class SQLAlchemyPlanRepository(AbstractPlanRepository):
 
     async def get_trial(self) -> DomainPlan | None:
         """Получить тариф пробного периода."""
-        stmt = select(ORMPlan).where(ORMPlan.plan_type == PlanType.TRIAL)
+        stmt = select(ORMPlan).where(ORMPlan.plan_type == PlanType.TRIAL).order_by(ORMPlan.price)
         result = await self._session.execute(stmt)
         orm_plan = result.scalar_one_or_none()
 
@@ -52,7 +52,7 @@ class SQLAlchemyPlanRepository(AbstractPlanRepository):
             ORMPlan.is_active.is_(True)
         )
         result = await self._session.execute(stmt)
-        orm_plans  = result.scalars().all()
+        orm_plans = result.scalars().all()
 
         return [to_domain(orm_plan) for orm_plan in orm_plans ]
 
@@ -86,9 +86,7 @@ class SQLAlchemyPlanRepository(AbstractPlanRepository):
     # Обновление данных
     async def update(self, plan: DomainPlan) -> None:
         """Обновление данных."""
-        stmt = select(ORMPlan).where(ORMPlan.id == plan.id)
-        result = await self._session.execute(stmt)
-        orm_plan = result.scalar_one_or_none()
+        orm_plan = await self._session.get(ORMPlan, plan.id)
 
         if orm_plan is None:
             raise ValueError("Plan not found")

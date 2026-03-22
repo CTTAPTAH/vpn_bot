@@ -13,15 +13,16 @@ class AbstractPaymentRepository(ABC):
         ...
 
     @abstractmethod
-    async def get_by_provider_and_payment_id(
-            self,
-            provider: PaymentProvider,
-            provider_payment_id: str
-    ) -> Payment | None:
+    async def get_for_update(self, payment_id: int) -> Payment | None:
         ...
 
     @abstractmethod
-    async def get_user_pending_payment(self, user_id: int) -> Payment | None:
+    async def get_by_provider_and_payment_id(self, provider: PaymentProvider,
+                                             provider_payment_id: str) -> Payment | None:
+        ...
+
+    @abstractmethod
+    async def get_user_pending_payment_for_update(self, user_id: int) -> Payment | None:
         ...
 
     @abstractmethod
@@ -29,7 +30,7 @@ class AbstractPaymentRepository(ABC):
         ...
 
     @abstractmethod
-    async def get_user_trial(self, user_id: int) -> Payment | None:
+    async def get_user_trial_for_update(self, user_id: int) -> Payment | None:
         ...
 
     @abstractmethod

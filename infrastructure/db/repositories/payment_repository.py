@@ -39,6 +39,20 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
 
         return to_domain(orm_payment)
 
+    async def get_for_update(self, payment_id: int) -> Payment | None:
+        """Получить платёж по id и блокировать строку для идемпотентности."""
+        stmt = (select(ORMPayment)
+                .where(ORMPayment.id == payment_id)
+                .with_for_update()
+                )
+        result = await self._session.execute(stmt)
+        orm_payment = result.scalar_one_or_none()
+
+        if orm_payment is None:
+            return None
+
+        return to_domain(orm_payment)
+
     async def get_by_provider_and_payment_id(
             self,
             provider: PaymentProvider,
@@ -57,11 +71,15 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
 
         return to_domain(orm_payment)
 
-    async def get_user_pending_payment(self, user_id: int) -> Payment | None:
-        """Получить не завершённый платёж пользователя."""
-        stmt = select(ORMPayment).where(
-            ORMPayment.status == PaymentStatus.PENDING,
-            ORMPayment.user_id == user_id
+    async def get_user_pending_payment_for_update(self, user_id: int) -> Payment | None:
+        """Возвращает незавершённый платёж пользователя и блокирует его строку для идемпотентности."""
+        stmt = (
+            select(ORMPayment)
+            .where(
+                ORMPayment.status == PaymentStatus.PENDING,
+                ORMPayment.user_id == user_id
+            )
+            .with_for_update()
         )
         result = await self._session.execute(stmt)
         orm_payment = result.scalar_one_or_none()
@@ -83,19 +101,23 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
         )
         return bool(await self._session.scalar(stmt))
 
-    async def get_user_trial(self, user_id: int) -> DomainPayment | None:
-        """Получить платёж пробного периода пользователя."""
-        stmt = select(ORMPayment).where(
-            ORMPayment.type == PaymentType.TRIAL,
-            ORMPayment.user_id == user_id
+    async def get_user_trial_for_update(self, user_id: int):
+        stmt = (
+            select(ORMPayment)
+            .where(
+                ORMPayment.user_id == user_id,
+                ORMPayment.type == PaymentType.TRIAL
+            )
+            .with_for_update()
         )
-        result = await self._session.execute(stmt)
-        orm_payment = result.scalar_one_or_none()
 
-        if orm_payment is None:
+        result = await self._session.execute(stmt)
+        orm_model = result.scalar_one_or_none()
+
+        if orm_model is None:
             return None
 
-        return to_domain(orm_payment)
+        return to_domain(orm_model)
 
     # Добавление данных
     async def add(self, payment: DomainPayment) -> None:
@@ -120,9 +142,7 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
 
     # Обновление данных
     async def update(self, payment: DomainPayment) -> None:
-        stmt = select(ORMPayment).where(ORMPayment.id == payment.id)
-        result = await self._session.execute(stmt)
-        orm_payment = result.scalar_one_or_none()
+        orm_payment = await self._session.get(ORMPayment, payment.id)
 
         if orm_payment is None:
             raise ValueError("Payment not found")

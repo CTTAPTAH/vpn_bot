@@ -6,23 +6,18 @@ from application.common.dto import KeyDTO
 from application.ports.unit_of_work import AbstractUnitOfWork
 from domain.entities.audit_log import AuditLog
 from domain.enums import AuditLevel, AuditEventType
-from core.utils import utcnow_naive
+from core.utils import utcnow
 
 class GetKeyForDeletionErrorType(StrEnum):
     """Тип ошибки при получении информации о ключе, который хотят удалить."""
     NOT_FOUND_IN_DB = "NOT_FOUND_IN_DB"
 
+@dataclass
 class GetKeyForDeletionResult:
     """Базовый класс для результатов: ошибка, успех"""
-    pass
-
-@dataclass
-class GetKeyForDeletionSuccess(GetKeyForDeletionResult):
-    key: KeyDTO
-
-@dataclass
-class GetKeyForDeletionError(GetKeyForDeletionResult):
-    error_type: GetKeyForDeletionErrorType
+    success: bool
+    key: KeyDTO | None = None
+    error_type: GetKeyForDeletionErrorType | None = None
 
 class GetKeyForDeletionUseCase:
     """Сценарий получения данных о ключе, который хочет удалить пользователь."""
@@ -31,7 +26,7 @@ class GetKeyForDeletionUseCase:
 
     async def execute(self, key_id: int, tg_id: int) -> GetKeyForDeletionResult:
         """Получить информацию о выбранном ключе, который хотят удалить."""
-        now = utcnow_naive()
+        now = utcnow()
 
         # Поиск ключа в БД
         async with self._uow as uow:
@@ -48,9 +43,10 @@ class GetKeyForDeletionUseCase:
                         )
                     )
                 )
-                return GetKeyForDeletionError(error_type=GetKeyForDeletionErrorType.NOT_FOUND_IN_DB)
+                return GetKeyForDeletionResult(success=False, error_type=GetKeyForDeletionErrorType.NOT_FOUND_IN_DB)
 
-        return GetKeyForDeletionSuccess(
+        return GetKeyForDeletionResult(
+            success=True,
             key=KeyDTO(
                 id=key.id,
                 plan_name=key.plan_name,

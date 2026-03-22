@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from core.utils import utcnow_naive
+from core.utils import utcnow
 from domain.enums import PaymentStatus, PaymentType, PaymentProvider, PaymentAction
 
 @dataclass
@@ -18,7 +18,7 @@ class Payment:
     provider: PaymentProvider
     provider_payment_id: str
     status: PaymentStatus = PaymentStatus.PENDING
-    created_at: datetime = field(default_factory=utcnow_naive)
+    created_at: datetime = field(default_factory=utcnow)
     id: int | None = None
     key_id: int | None = None
     granted_at: datetime | None = None

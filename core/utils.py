@@ -2,17 +2,18 @@
 Вспомогательные функции для удобства программирования.
 """
 from datetime import datetime, UTC, timedelta
+from uuid import uuid4
 
 SECONDS_IN_MONTH = 30 * 24 * 60 * 60
 SECONDS_IN_DAY = 24 * 60 * 60
 
-def utcnow_naive() -> datetime:
-    """Текущее время UTC без tzinfo. Используется для PostgreSQL TIMESTAMP WITHOUT TIME ZONE."""
-    return datetime.now(UTC).replace(tzinfo=None)
+def utcnow() -> datetime:
+    """Текущее время UTC."""
+    return datetime.now(UTC)
 
-def add_seconds_to_now_naive(seconds: int) -> datetime:
+def add_seconds_to_now(seconds: int) -> datetime:
     """Добавить секунды к текущему времени."""
-    return utcnow_naive() + timedelta(seconds=seconds)
+    return utcnow() + timedelta(seconds=seconds)
 
 def months_from_seconds(seconds: int) -> int:
     """Перевод секунд в месяца"""
@@ -29,3 +30,7 @@ def datetime_to_ms(dt: datetime) -> int:
 def ms_to_datetime(ms: int) -> datetime:
     """Переводит мс в datetime."""
     return datetime.fromtimestamp(ms / 1000)
+
+def new_uuid() -> str:
+    """Генерирует uuid."""
+    return str(uuid4())

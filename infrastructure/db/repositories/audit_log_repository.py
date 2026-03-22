@@ -14,7 +14,6 @@ class SQLAlchemyAuditLogRepository(AbstractAuditLogRepository):
             level=audit_log.level,
             event_type=audit_log.event_type,
             message=audit_log.message,
-            context=audit_log.context,
             created_at=audit_log.created_at
         )
         self._session.add(orm_audit)
