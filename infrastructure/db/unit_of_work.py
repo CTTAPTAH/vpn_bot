@@ -19,12 +19,14 @@ from infrastructure.db.repositories.audit_log_repository import SQLAlchemyAuditL
 from infrastructure.db.repositories.payment_repository import SQLAlchemyPaymentRepository
 from infrastructure.db.repositories.plan_repository import SQLAlchemyPlanRepository
 from infrastructure.db.repositories.user_repository import SQLAlchemyUserRepository
+from infrastructure.db.repositories.server_repository import SQLAlchemyServerRepository
 
 from application.ports.repositories.access_key_repository import AbstractAccessKeyRepository
 from application.ports.repositories.audit_log_repository import AbstractAuditLogRepository
 from application.ports.repositories.payment_repository import AbstractPaymentRepository
 from application.ports.repositories.plan_repository import AbstractPlanRepository
 from application.ports.repositories.user_repository import AbstractUserRepository
+from application.ports.repositories.server_repository import AbstractServerRepository
 
 class SQLAlchemyUnitOfWork(AbstractUnitOfWork):
     """Конкретная реализация Unit of Work для SQLAlchemy."""
@@ -34,6 +36,7 @@ class SQLAlchemyUnitOfWork(AbstractUnitOfWork):
 
         # Репозитории (будут созданы при входе в контекст)
         self.users: AbstractUserRepository | None = None
+        self.servers: AbstractServerRepository | None = None
         self.plans: AbstractPlanRepository | None = None
         self.keys: AbstractAccessKeyRepository | None = None
         self.payments: AbstractPaymentRepository | None = None
@@ -47,6 +50,7 @@ class SQLAlchemyUnitOfWork(AbstractUnitOfWork):
         self.plans = SQLAlchemyPlanRepository(self.session)
         self.keys = SQLAlchemyAccessKeyRepository(self.session)
         self.payments = SQLAlchemyPaymentRepository(self.session)
+        self.servers = SQLAlchemyServerRepository(self.session)
         self.audits = SQLAlchemyAuditLogRepository(self.session)
 
         return self

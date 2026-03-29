@@ -21,13 +21,6 @@ BOT_TOKEN = _require(os.getenv("BOT_TOKEN"), "BOT_TOKEN")
 MAX_KEYS_PER_USER = 5
 MAX_DEVICE_PER_KEY = 3
 
-# XUI
-XUI_BASE_URL = _require(os.getenv("XUI_BASE_URL"), "XUI_BASE_URL")
-XUI_USERNAME = _require(os.getenv("XUI_USERNAME"), "XUI_USERNAME")
-XUI_PASSWORD = _require(os.getenv("XUI_PASSWORD"), "XUI_PASSWORD")
-VPN_HOST = _require(os.getenv("VPN_HOST"), "VPN_HOST")
-INBOUND_NAME = _require(os.getenv("INBOUND_NAME"), "INBOUND_NAME")
-
 # Retry XUI
 XUI_RETRY_ATTEMPTS = 3
 XUI_RETRY_BASE_DELAY = 1

@@ -33,10 +33,11 @@ class CreatePaymentUseCase:
                       provider: PaymentProvider, plan_id: int) -> CreatePaymentResult:
         async with self._uow as uow:
             user = await uow.users.get_or_create(tg_id, username)
+            user_locked = await uow.users.get_by_id_for_update(user.id)
 
             # Если при попытке покупки лимит по ключам превышен, то платёж не может быть создан
             if payment_action == PaymentAction.CREATE:
-                count_keys = await uow.keys.count_all_keys(user.id)
+                count_keys = await uow.keys.count_all_keys(user_locked.id)
                 if count_keys >= MAX_KEYS_PER_USER:
                     await self._audit(
                         uow,
@@ -50,7 +51,7 @@ class CreatePaymentUseCase:
                     return CreatePaymentResult(success=False, error=CreatePaymentErrorType.LIMIT_KEYS)
 
             # Проверяем, есть ли у пользователя не завершённый платёж
-            payment = await uow.payments.get_user_pending_payment_for_update(user.id)
+            payment = await uow.payments.get_user_pending_payment_for_update(user_locked.id)
 
             # Если такой платёж есть, то возвращаем его
             # ЗАГЛУШКА
@@ -72,11 +73,11 @@ class CreatePaymentUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.PAYMENT_NOT_FOUND,
-                    f"Платёж не создан, тариф не найден. user_id={user.id}, plan_id={plan_id}"
+                    f"Платёж не создан, тариф не найден. user_id={user_locked.id}, plan_id={plan_id}"
                 )
                 return CreatePaymentResult(success=False, error=CreatePaymentErrorType.PLAN_NOT_FOUND)
 
-            payment = await self._create_payment(uow, user.id, plan_id, plan.price, payment_action, provider)
+            payment = await self._create_payment(uow, user_locked.id, plan_id, plan.price, payment_action, provider)
 
         # ЗАГЛУШКА
         return CreatePaymentResult(

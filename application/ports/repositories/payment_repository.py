@@ -22,6 +22,10 @@ class AbstractPaymentRepository(ABC):
         ...
 
     @abstractmethod
+    async def get_user_pending_payment(self, user_id: int) -> Payment | None:
+        ...
+
+    @abstractmethod
     async def get_user_pending_payment_for_update(self, user_id: int) -> Payment | None:
         ...
 

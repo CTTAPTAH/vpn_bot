@@ -18,6 +18,7 @@ from application.ports.repositories.access_key_repository import AbstractAccessK
 from application.ports.repositories.audit_log_repository import AbstractAuditLogRepository
 from application.ports.repositories.payment_repository import AbstractPaymentRepository
 from application.ports.repositories.plan_repository import AbstractPlanRepository
+from application.ports.repositories.server_repository import AbstractServerRepository
 from application.ports.repositories.user_repository import AbstractUserRepository
 
 class AbstractUnitOfWork(ABC):
@@ -33,6 +34,7 @@ class AbstractUnitOfWork(ABC):
     plans: AbstractPlanRepository
     keys: AbstractAccessKeyRepository
     payments: AbstractPaymentRepository
+    servers: AbstractServerRepository
     audits: AbstractAuditLogRepository
 
     @abstractmethod

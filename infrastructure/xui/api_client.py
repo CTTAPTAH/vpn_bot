@@ -12,6 +12,7 @@ Async XUI API client.
 
 import json, asyncio, logging
 from uuid import uuid4
+from httpx import Response
 
 from infrastructure.xui.http_client import XuiHttpClient
 from infrastructure.xui.exceptions import (
@@ -43,9 +44,9 @@ class XuiApiClient:
         self._username = username
         self._password = password
         self._host = host
-        self._inbounds_cache: list[Inbound] | None = None
+        self._inbound_cache: Inbound | None = None
 
-    async def _send(self, method: HttpMethod, url: str, **kwargs):
+    async def _send(self, method: HttpMethod, url: str, **kwargs) -> Response:
         """Отправка api запроса."""
         if method is HttpMethod.GET:
             return await self._http.get(url, **kwargs)
@@ -124,97 +125,77 @@ class XuiApiClient:
         logger.info("Авторизация успешна")
 
     # INBOUNDS
-    async def get_inbounds(self) -> list[Inbound]:
-        """Возвращает список inbound'ов."""
-        if self._inbounds_cache is not None:
-            return self._inbounds_cache
-
-        raw = await self._request(HttpMethod.GET, "panel/api/inbounds/list")
-
-        if not isinstance(raw, list):
-            raise XuiInvalidResponseError("Expected list of inbounds")
-
-        self._inbounds_cache = [Inbound.from_dict(i) for i in raw]
-        return self._inbounds_cache
-
     async def get_inbound_by_id(self, inbound_id: int) -> Inbound:
         """Возвращает конкретный inbound по заданному id."""
+        if self._inbound_cache is not None:
+            return self._inbound_cache
+
         raw = await self._request(
             HttpMethod.GET,
             f"panel/api/inbounds/get/{inbound_id}",
         )
 
-        return Inbound.from_dict(raw)
-
-    async def get_inbound_by_name(self, inbound_name: str) -> Inbound:
-        """Возвращает конкретный inbound по его имени."""
-        inbounds = await self.get_inbounds()
-
-        for inbound in inbounds:
-            if inbound.remark == inbound_name:
-                if inbound.id is None:
-                    raise XuiInvalidResponseError(f"Inbound '{inbound_name}' has no id")
-                return inbound
-
-        raise XuiInvalidResponseError(f"Inbound '{inbound_name}' not found")
+        self._inbound_cache = Inbound.from_dict(raw)
+        return self._inbound_cache
 
     # CLIENTS
-    async def get_clients(self, inbound_name: str) -> list[Client]:
+    async def get_clients(self, inbound_id: int) -> list[Client]:
         """Получить всех клиентов в определённом inbond'е."""
-        inbound = await self.get_inbound_by_name(inbound_name)
+        inbound = await self.get_inbound_by_id(inbound_id)
 
         return inbound.clients
 
-    async def find_client(self, email: str, inbound_name: str) -> Client | None:
+    async def find_client(self, email: str, inbound_id: int) -> Client | None:
         """Ищет клиента по email в заданном inbound'е."""
-        clients = await self.get_clients(inbound_name)
+        clients = await self.get_clients(inbound_id)
+
         for client in clients:
             if client.email == email:
                 return client
 
         return None
 
-    async def find_client_by_uuid(self, uuid: str, inbound_name: str) -> Client | None:
+    async def find_client_by_uuid(self, uuid: str, inbound_id: int) -> Client | None:
         """Ищет клиента по uuid в заданном inbound'е."""
-        clients = await self.get_clients(inbound_name)
+        clients = await self.get_clients(inbound_id)
         for client in clients:
             if client.uuid == uuid:
                 return client
         return None
 
-    async def is_client_exists(self, email: str, inbound_name: str) -> bool:
+    async def is_client_exists(self, email: str, inbound_id: int) -> bool:
         """Проверяет, существует ли клиент с данным email в указанном inbound'е."""
-        return (await self.find_client(email, inbound_name)) is not None
+        return (await self.find_client(email, inbound_id)) is not None
 
-    async def is_client_enabled(self, email: str, inbound_name: str) -> bool:
+    async def is_client_enabled(self, email: str, inbound_id: int) -> bool:
         """Возвращает True, если клиент включён в указанном inbound'е."""
-        client = await self.find_client(email, inbound_name)
+        client = await self.find_client(email, inbound_id)
         if client is not None:
             return client.enabled
 
         return False
 
-    async def get_client_expiry(self, email: str, inbound_name: str) -> int | None:
+    async def get_client_expiry(self, email: str, inbound_id: int) -> int | None:
         """
         Возвращает expiryTime клиента (timestamp в мс) в указанном inbound'е.
         Возвращает None, если клиента нет или срок не задан.
         """
-        client = await self.find_client(email, inbound_name)
+        client = await self.find_client(email, inbound_id)
         if client is not None:
             return client.expiry_time
         return None
 
-    async def is_client_expired(self, email: str, inbound_name: str) -> bool:
+    async def is_client_expired(self, email: str, inbound_id: int) -> bool:
         """True, если срок действия истёк."""
-        client = await self.find_client(email, inbound_name)
+        client = await self.find_client(email, inbound_id)
         if client is not None:
             return client.is_expired()
 
         return False
 
-    async def get_client_link(self, email: str, inbound_name: str, server_name: str) -> str:
+    async def get_client_link(self, email: str, inbound_id: int, key_name: str) -> str:
         """Генерирует VLESS-ссылку для клиента."""
-        client = await self.find_client(email, inbound_name)
+        client = await self.find_client(email, inbound_id)
         if client is None:
             raise XuiInvalidResponseError(f"Client {email} not found")
 
@@ -240,7 +221,7 @@ class XuiApiClient:
 
         return (
             f"vless://{uuid}@{self._host}:{port}?type={type_network}&encryption={encryption}&security={security}"
-            f"&pbk={pbk}&fp={fp}&sni={sni}&sid={sid}&spx={spx}#{server_name}"
+            f"&pbk={pbk}&fp={fp}&sni={sni}&sid={sid}&spx={spx}#{key_name}"
         )
 
     # CRUD
@@ -262,12 +243,12 @@ class XuiApiClient:
             }),
         }
 
-    async def update_client(self, email: str, inbound_name: str, *, new_email: str = None,
+    async def update_client(self, email: str, inbound_id: int, *, new_email: str = None,
                             enabled: bool = None, expiry_time: int = None) -> None:
         """Универсальный метод для обновления клиента."""
-        logger.info("Обновляется клиент %s в inbound '%s'", email, inbound_name)
+        logger.info("Обновляется клиент %s в inbound '%s'", email, inbound_id)
 
-        client = await self.find_client(email, inbound_name)
+        client = await self.find_client(email, inbound_id)
         if client is None:
             raise XuiClientNotFoundError(f"Client {email} not found")
 
@@ -279,25 +260,25 @@ class XuiApiClient:
             expiry_time=client.expiry_time if expiry_time is None else expiry_time,
         )
 
-        self._inbounds_cache = None
+        self._inbound_cache = None
         await self._request(HttpMethod.POST, f"panel/api/inbounds/updateClient/{client.uuid}", json=payload)
 
-    async def add_client(self, inbound_name: str, email: str, *, uuid: str | None = None,
+    async def add_client(self, inbound_id: int, email: str, *, uuid: str | None = None,
                          expiry_time: int = 0, enable: bool = True) -> None:
         """
         Создаёт нового клиента в указанном inbound.
-        :param inbound_name: название inbound'а
+        :param inbound_id: название inbound'а
         :param email: email клиента (идентификатор)
         :param uuid: UUID клиента
         :param expiry_time: timestamp в мс или None (бессрочно)
         :param enable: включён ли клиент
         """
-        logger.info("Создаётся клиент %s в inbound '%s'", email, inbound_name)
-        inbound = await self.get_inbound_by_name(inbound_name)
+        logger.info("Создаётся клиент %s в inbound '%s'", email, inbound_id)
+        inbound = await self.get_inbound_by_id(inbound_id)
 
         if uuid is None:
             uuid = str(uuid4())
-        if await self.find_client_by_uuid(uuid, inbound_name):
+        if await self.find_client_by_uuid(uuid, inbound_id):
             raise XuiClientAlreadyExistsError(f"Client with uuid {uuid} already exists")
 
         payload = self._build_client_payload(
@@ -308,16 +289,16 @@ class XuiApiClient:
             expiry_time=expiry_time,
         )
 
-        self._inbounds_cache = None
+        self._inbound_cache = None
         await self._request(HttpMethod.POST, f"panel/api/inbounds/addClient", json=payload)
 
-    async def delete_client(self, email: str, inbound_name: str):
+    async def delete_client(self, email: str, inbound_id: int):
         """Удаление клиента."""
-        logger.info("Удаляется клиент %s из inbound '%s'", email, inbound_name)
+        logger.info("Удаляется клиент %s из inbound '%s'", email, inbound_id)
 
-        client = await self.find_client(email, inbound_name)
+        client = await self.find_client(email, inbound_id)
         if client is None:
             raise XuiClientNotFoundError(f"Client {email} not found")
 
-        self._inbounds_cache = None
+        self._inbound_cache = None
         await self._request(HttpMethod.POST, f"panel/api/inbounds/{client.inbound_id}/delClient/{client.uuid}")

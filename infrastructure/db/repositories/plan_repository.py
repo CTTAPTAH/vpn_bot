@@ -50,7 +50,7 @@ class SQLAlchemyPlanRepository(AbstractPlanRepository):
         stmt = select(ORMPlan).where(
             ORMPlan.plan_type == PlanType.PAID,
             ORMPlan.is_active.is_(True)
-        )
+        ).order_by(ORMPlan.price)
         result = await self._session.execute(stmt)
         orm_plans = result.scalars().all()
 

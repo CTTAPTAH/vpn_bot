@@ -71,6 +71,23 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
 
         return to_domain(orm_payment)
 
+    async def get_user_pending_payment(self, user_id: int) -> Payment | None:
+        """Возвращает незавершённый платёж пользователя и блокирует его строку для идемпотентности."""
+        stmt = (
+            select(ORMPayment)
+            .where(
+                ORMPayment.status == PaymentStatus.PENDING,
+                ORMPayment.user_id == user_id
+            )
+        )
+        result = await self._session.execute(stmt)
+        orm_payment = result.scalars().first()
+
+        if orm_payment is None:
+            return None
+
+        return to_domain(orm_payment)
+
     async def get_user_pending_payment_for_update(self, user_id: int) -> Payment | None:
         """Возвращает незавершённый платёж пользователя и блокирует его строку для идемпотентности."""
         stmt = (
@@ -82,7 +99,7 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
             .with_for_update()
         )
         result = await self._session.execute(stmt)
-        orm_payment = result.scalar_one_or_none()
+        orm_payment = result.scalars().first()
 
         if orm_payment is None:
             return None
@@ -148,7 +165,6 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
             raise ValueError("Payment not found")
 
         orm_payment.key_id = payment.key_id
-        orm_payment.type = payment.type
         orm_payment.status = payment.status
         orm_payment.granted_at = payment.granted_at
         orm_payment.paid_at = payment.paid_at

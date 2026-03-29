@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from application.ports.unit_of_work import AbstractUnitOfWork
 from core.utils import utcnow
 
-@dataclass
+@dataclass(slots=True)
 class MainMenuDTO:
     active_keys: int
     trial_used: bool

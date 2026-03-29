@@ -1,20 +1,23 @@
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
 from domain.entities.access_key import AccessKey as DomainAccessKey
 from application.ports.repositories.access_key_repository import (
     AbstractAccessKeyRepository,
-    AccessKeyView
+    AccessKeyView,
+    ServerKeysLoad
 )
 from infrastructure.db.models.access_key import AccessKey as ORMAccessKey
 from infrastructure.db.models.plan import Plan as ORMPlan
+from infrastructure.db.models.server import Server as ORMServer
 
 def to_domain(orm_access_key: ORMAccessKey) -> DomainAccessKey:
     return DomainAccessKey(
         id=orm_access_key.id,
         user_id=orm_access_key.user_id,
         plan_id=orm_access_key.plan_id,
+        server_id=orm_access_key.server_id,
         start_at=orm_access_key.start_at,
         end_at=orm_access_key.end_at,
         vless_link=orm_access_key.vless_link
@@ -128,7 +131,7 @@ class SQLAlchemyAccessKeyRepository(AbstractAccessKeyRepository):
 
     async def count_active_keys(self, user_id: int, now: datetime) -> int:
         """Возвращает количество активных (не истёкших) ключей пользователя."""
-        stmt = select(func.count()).where(
+        stmt = select(func.count(ORMAccessKey.id)).where(
             ORMAccessKey.user_id == user_id,
             ORMAccessKey.end_at > now
         )
@@ -136,11 +139,43 @@ class SQLAlchemyAccessKeyRepository(AbstractAccessKeyRepository):
         result = await self._session.scalar(stmt)
         return int(result)
 
+    async def get_servers_keys_load(self, server_ids: list[int]) -> list[ServerKeysLoad]:
+        """Возвращает количество ключей на каждом сервере."""
+        if not server_ids:
+            return []
+
+        stmt = (
+            select(
+                ORMServer.id,
+                func.count(ORMAccessKey.id),
+                ORMServer.max_clients
+            )
+            .outerjoin(
+                ORMAccessKey,
+                ORMAccessKey.server_id == ORMServer.id
+            )
+            .where(ORMServer.id.in_(server_ids))
+            .group_by(ORMServer.id)
+            .order_by(ORMServer.id)
+        )
+        result = await self._session.execute(stmt)
+        rows = result.all()
+
+        return [
+            ServerKeysLoad(
+                server_id=row[0],
+                keys_count=row[1],
+                max_clients=row[2]
+            )
+            for row in rows
+        ]
+
     # Добавление данных
     async def add(self, access_key: DomainAccessKey) -> None:
         orm_key = ORMAccessKey(
             user_id=access_key.user_id,
             plan_id=access_key.plan_id,
+            server_id=access_key.server_id,
             start_at=access_key.start_at,
             end_at=access_key.end_at,
             vless_link=access_key.vless_link
@@ -165,11 +200,12 @@ class SQLAlchemyAccessKeyRepository(AbstractAccessKeyRepository):
     # Удаление данных
     async def delete(self, access_key_id: int) -> None:
         """Удаляет ключ из базы по ID."""
-        stmt = select(ORMAccessKey).where(ORMAccessKey.id == access_key_id)
-        result = await self._session.execute(stmt)
-        orm_key = result.scalar_one_or_none()
+        stmt = (
+            delete(ORMAccessKey)
+            .where(ORMAccessKey.id == access_key_id)
+            .returning(ORMAccessKey.id)
+        )
+        result = await self._session.scalar(stmt)
 
-        if orm_key is None:
-            raise ValueError(f"AccessKey with id={access_key_id} not found")
-
-        await self._session.delete(orm_key)
+        if result is None:
+            raise ValueError("AccessKey not found")

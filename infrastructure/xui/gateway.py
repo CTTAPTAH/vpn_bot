@@ -12,17 +12,18 @@ Application слой ничего не знает про XUI.
 
 from datetime import datetime
 
-from application.ports.vpn_gateway import VpnGateway, VpnKey
+from application.ports.vpn.gateway import AbstractVpnGateway, VpnKey
 from application.errors.vpn_errors import (
     VpnClientAlreadyExistsError,
+    VpnKeyNotFoundError,
     VpnGatewayError,
 )
 from infrastructure.xui.api_client import XuiApiClient
 from infrastructure.xui.models import Client as XuiClient
-from infrastructure.xui.exceptions import XuiClientAlreadyExistsError
+from infrastructure.xui.exceptions import XuiClientAlreadyExistsError, XuiClientNotFoundError, XuiInvalidResponseError
 from core.utils import datetime_to_ms, ms_to_datetime
 
-class XuiVpnGateway(VpnGateway):
+class XuiVpnGateway(AbstractVpnGateway):
     """
     Адаптер XUI API к VpnGateway.
 
@@ -30,9 +31,9 @@ class XuiVpnGateway(VpnGateway):
     - Преобразует XUI-модель в VpnKey
     - Изолирует Application слой от особенностей XUI
     """
-    def __init__(self, xui_client: XuiApiClient, inbound_name: str) -> None:
+    def __init__(self, xui_client: XuiApiClient, inbound_id: int) -> None:
         self._xui = xui_client
-        self._inbound_name = inbound_name
+        self._inbound_id = inbound_id
 
     async def create_key(self, email: str, expires_at: datetime | None) -> VpnKey:
         """Создаёт ключ в XUI."""
@@ -40,7 +41,7 @@ class XuiVpnGateway(VpnGateway):
 
         try:
             await self._xui.add_client(
-                inbound_name=self._inbound_name,
+                inbound_id=self._inbound_id,
                 email=email,
                 expiry_time=expiry_ms,
                 enable=True
@@ -56,44 +57,64 @@ class XuiVpnGateway(VpnGateway):
         """Обновляет дату истечения ключа."""
         expiry_ms = datetime_to_ms(new_expires_at)
 
-        await self._xui.update_client(
-            email=email,
-            inbound_name=self._inbound_name,
-            expiry_time=expiry_ms
-        )
+        try:
+            await self._xui.update_client(
+                email=email,
+                inbound_id=self._inbound_id,
+                expiry_time=expiry_ms
+            )
+        except XuiClientNotFoundError as e:
+            raise VpnKeyNotFoundError from e
+        except Exception as e:
+            raise VpnGatewayError from e
 
     async def disable_key(self, email: str) -> None:
         """Деактивирует ключ (не удаляет)."""
-        await self._xui.update_client(
-            email=email,
-            inbound_name=self._inbound_name,
-            enabled=False
-        )
+        try:
+            await self._xui.update_client(
+                email=email,
+                inbound_id=self._inbound_id,
+                enabled=False
+            )
+        except XuiClientNotFoundError as e:
+            raise VpnKeyNotFoundError from e
+        except Exception as e:
+            raise VpnGatewayError from e
 
     async def enable_key(self, email: str) -> None:
         """Активирует ключ (не удаляет)."""
-        await self._xui.update_client(
-            email=email,
-            inbound_name=self._inbound_name,
-            enabled=True
-        )
+        try:
+            await self._xui.update_client(
+                email=email,
+                inbound_id=self._inbound_id,
+                enabled=True
+            )
+        except XuiClientNotFoundError as e:
+            raise VpnKeyNotFoundError from e
+        except Exception as e:
+            raise VpnGatewayError from e
 
     async def delete_key(self, email: str) -> None:
         """Полностью удаляет ключ из XUI."""
-        await self._xui.delete_client(
-            email=email,
-            inbound_name=self._inbound_name
-        )
+        try:
+            await self._xui.delete_client(
+                email=email,
+                inbound_id=self._inbound_id
+            )
+        except XuiClientNotFoundError as e:
+            raise VpnKeyNotFoundError from e
+        except Exception as e:
+            raise VpnGatewayError from e
 
     async def is_client_exists(self, email: str) -> bool:
         """Проверяет, есть ли клиент в inbound'е."""
-        return await self._xui.is_client_exists(email, self._inbound_name)
+        return await self._xui.is_client_exists(email, self._inbound_id)
 
     async def get_key(self, email: str) -> VpnKey | None:
         """Возвращает состояние ключа."""
         client = await self._xui.find_client(
             email=email,
-            inbound_name=self._inbound_name
+            inbound_id=self._inbound_id
         )
 
         if client is None:
@@ -101,18 +122,18 @@ class XuiVpnGateway(VpnGateway):
 
         return self._map_to_dto(client)
 
-    async def get_link(self, email: str, server_name: str) -> str:
+    async def get_link(self, email: str, key_name: str) -> str:
         """Возвращает VLESS ссылку для клиента."""
         try:
             return await self._xui.get_client_link(
                 email=email,
-                inbound_name=self._inbound_name,
-                server_name=server_name
+                inbound_id=self._inbound_id,
+                key_name=key_name
             )
-        except XuiClientAlreadyExistsError as e:
-            raise VpnClientAlreadyExistsError from e
+        except XuiInvalidResponseError as e:
+            raise VpnKeyNotFoundError from e
         except Exception as e:
-            raise VpnGatewayError from e
+            raise VpnGatewayError(str(e)) from e
 
     # Приватный метод
     def _map_to_dto(self, client: XuiClient) -> VpnKey:

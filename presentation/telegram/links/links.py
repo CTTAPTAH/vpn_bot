@@ -1,7 +1,7 @@
 """В файле храним ссылки, которые ведут на другие ресурсы."""
 from urllib.parse import quote_plus
-from core.config import VPN_HOST
 
+VPN_HOST = "171.22.30.206"
 def v2raytun_deeplink(vless: str) -> str:
     """Генерирует deeplink для  v2RayTun."""
     inner = quote_plus(vless)

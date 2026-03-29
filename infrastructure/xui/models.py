@@ -7,13 +7,11 @@
 import json
 import time
 from dataclasses import dataclass, field
-from typing import List
 from infrastructure.xui.exceptions import XuiInvalidResponseError
 
 @dataclass
 class Client:
     """Модель для хранения информации о клиенте."""
-    id: int | None # внутренний ID XUI
     uuid: str # VLESS UUID
     email: str
     inbound_id: int
@@ -23,11 +21,10 @@ class Client:
     @classmethod
     def from_dict(cls, data: dict, inbound_id: int):
         if not isinstance(data, dict):
-            raise XuiInvalidResponseError("Expected dict")
+            raise XuiInvalidResponseError("Expected dict for client")
 
         return cls(
-            id=data.get("id"),
-            uuid=data.get("uuid"),
+            uuid=data.get("id"),
             email=data.get("email"),
             inbound_id=inbound_id,
             enabled=bool(data.get("enable", True)),
@@ -47,16 +44,22 @@ class Inbound:
     protocol: str
     enabled: bool
     stream_settings_raw: str
-    clients: List[Client] = field(default_factory=list)
+    clients: list[Client] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict):
         if not isinstance(data, dict):
-            raise XuiInvalidResponseError("Expected dict")
+            raise XuiInvalidResponseError("Expected dict for inbound")
 
         inbound_id = data["id"]
 
-        clients_data = data.get("clientStats") or []
+        settings_raw = data.get("settings") or "{}"
+        try:
+            settings = json.loads(settings_raw)
+        except Exception:
+            settings = {}
+
+        clients_data = settings.get("clients", [])
 
         clients = [
             Client.from_dict(c, inbound_id)
@@ -69,7 +72,7 @@ class Inbound:
             port=int(data.get("port")),
             protocol=data.get("protocol"),
             enabled=data.get("enable", True),
-            stream_settings_raw=data.get("streamSettings", ""),
+            stream_settings_raw=settings_raw,
             clients=clients,
         )
 

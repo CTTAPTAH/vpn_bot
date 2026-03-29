@@ -3,4 +3,3 @@
 Не зависят от окружения и не содержат секретных данных.
 """
 VPN_NAME = "Cheburneshka"
-SERVER_NAME = "🇳🇱 Netherlands"

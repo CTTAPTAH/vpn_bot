@@ -36,6 +36,13 @@ class AccessKey(Base):
         comment="id тарифа, на который подписался пользователь."
     )
 
+    server_id: Mapped[int] = mapped_column(
+        ForeignKey("servers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+        comment="id сервера, на котором расположен ключ"
+    )
+
     start_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -15,7 +15,7 @@ class GetAvailablePlansUseCase:
     def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow
 
-    async def execute(self, tg_id: int, username: str) -> AvailablePlansDTO:
+    async def execute(self, tg_id: int, username: str | None) -> AvailablePlansDTO:
         async with self._uow as uow:
             user = await uow.users.get_or_create(tg_id, username)
             plans = await uow.plans.get_available_for_purchase()

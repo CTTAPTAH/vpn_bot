@@ -24,7 +24,7 @@ class VpnKey:
     expires_at: datetime | None
     is_active: bool
 
-class VpnGateway(ABC):
+class AbstractVpnGateway(ABC):
     """
     Порт взаимодействия с VPN-системой.
 

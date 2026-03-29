@@ -1,8 +1,8 @@
 """Инициализация БД
 
-Revision ID: 8d7898057cc4
+Revision ID: 8d200b1e5edb
 Revises: 
-Create Date: 2026-03-21 20:27:26.624284
+Create Date: 2026-03-28 17:25:31.732779
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '8d7898057cc4'
+revision: str = '8d200b1e5edb'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.create_table('audit_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('level', sa.Enum('INFO', 'WARNING', 'ERROR', name='auditlevel', native_enum=False), nullable=False, comment='Уровень лога: INFO, WARNING, ERROR.'),
-    sa.Column('event_type', sa.Enum('PAYMENT_CREATED', 'PAYMENT_FAILED', 'PAYMENT_CANCELLED', 'PAYMENT_COMPLETED', 'PAYMENT_NOT_FOUND', 'PAYMENT_NOT_OWNED_BY_USER', 'ACCESS_GRANTED', 'ACCESS_REVOKED', 'VPN_KEY_CREATED', 'VPN_KEY_UPDATED', 'VPN_KEY_FETCHED', 'VPN_KEY_DELETED', 'TRIAL_ALREADY_GRANTED', 'TRIAL_GRANTED', 'KEY_CANCELLED', 'KEY_NOT_FOUND_IN_DB', 'KEY_NOT_FOUND_IN_VPN', 'KEY_NOT_OWNED_BY_USER', 'KEY_LIMIT', 'PLAN_NOT_FOUND', 'PAYING_OTHER', 'ADMIN_ACTION', 'DB_ERROR', 'VPN_ERROR', 'PAYMENT_PROVIDER_ERROR', 'UNEXPECTED_ERROR', 'SYSTEM_ERROR', name='auditeventtype', native_enum=False), nullable=False, comment='Тип бизнес-события (PAYMENT_COMPLETED, ACCESS_GRANTED и т.д.).'),
+    sa.Column('event_type', sa.Enum('PAYMENT_CREATED', 'PAYMENT_FAILED', 'PAYMENT_CANCELLED', 'PAYMENT_COMPLETED', 'PAYMENT_NOT_FOUND', 'PAYMENT_NOT_OWNED_BY_USER', 'ACCESS_GRANTED', 'ACCESS_REVOKED', 'VPN_KEY_CREATED', 'VPN_KEY_UPDATED', 'VPN_KEY_FETCHED', 'VPN_KEY_DELETED', 'TRIAL_ALREADY_GRANTED', 'TRIAL_GRANTED', 'NO_AVAILABLE_SERVERS', 'SERVER_NOT_FOUND', 'KEY_CANCELLED', 'KEY_NOT_FOUND_IN_DB', 'KEY_NOT_FOUND_IN_VPN', 'KEY_NOT_OWNED_BY_USER', 'KEY_LIMIT', 'PLAN_NOT_FOUND', 'PAYING_OTHER', 'ADMIN_ACTION', 'DB_ERROR', 'VPN_ERROR', 'PAYMENT_PROVIDER_ERROR', 'UNEXPECTED_ERROR', 'SYSTEM_ERROR', name='auditeventtype', native_enum=False), nullable=False, comment='Тип бизнес-события (PAYMENT_COMPLETED, ACCESS_GRANTED и т.д.).'),
     sa.Column('message', sa.String(length=500), nullable=False, comment='Основное сообщение лога.'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Дата и время создания лога.'),
     sa.PrimaryKeyConstraint('id')
@@ -50,6 +50,25 @@ def upgrade() -> None:
     op.create_index(op.f('ix_plans_plan_type'), 'plans', ['plan_type'], unique=False)
     op.create_index('uq_plan_trial_once', 'plans', ['plan_type'], unique=True, postgresql_where=sa.text("plan_type = 'TRIAL'"))
     op.create_index('uq_plan_vip_once', 'plans', ['plan_type'], unique=True, postgresql_where=sa.text("plan_type = 'VIP'"))
+    op.create_table('servers',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=30), nullable=False, comment='Название сервера.'),
+    sa.Column('panel_url', sa.String(length=255), nullable=False, comment='Ссылка на панель сервера.'),
+    sa.Column('panel_username', sa.String(length=255), nullable=False, comment='Логин от панели сервера.'),
+    sa.Column('panel_password', sa.String(length=255), nullable=False, comment='Пароль от панели сервера.'),
+    sa.Column('host', sa.String(length=100), nullable=False, comment='host панели сервера.'),
+    sa.Column('inbound_id', sa.Integer(), nullable=False, comment='id inbound, в котором хранятся ключи.'),
+    sa.Column('inbound_name', sa.String(length=50), nullable=True, comment='Название inbound, в котором хранятся ключи. Не является источником истины.'),
+    sa.Column('default_key_name', sa.String(length=50), nullable=True, comment='Название ключа по умолчанию.'),
+    sa.Column('max_clients', sa.Integer(), nullable=False, comment='Лимит на количество ключей на сервере.'),
+    sa.Column('is_active', sa.Boolean(), server_default=sa.text('true'), nullable=False, comment='Активен ли сервер.'),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Время создания сервера в базе данных.'),
+    sa.CheckConstraint('max_clients > 0', name='ck_servers_price_positive'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
+    )
+    op.create_index(op.f('ix_servers_created_at'), 'servers', ['created_at'], unique=False)
+    op.create_index(op.f('ix_servers_is_active'), 'servers', ['is_active'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.Integer(), nullable=False, comment='Уникальный идентификатор пользователя (PK).'),
     sa.Column('tg_id', sa.BigInteger(), nullable=False, comment='Telegram ID пользователя (уникальный).'),
@@ -64,16 +83,19 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False, comment='id пользователя, у которого есть эта подписка.'),
     sa.Column('plan_id', sa.Integer(), nullable=False, comment='id тарифа, на который подписался пользователь.'),
+    sa.Column('server_id', sa.Integer(), nullable=False, comment='id сервера, на котором расположен ключ'),
     sa.Column('start_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Дата получение подписки пользователем.'),
     sa.Column('end_at', sa.DateTime(timezone=True), nullable=False, comment='Дата окончания подписки пользователя.'),
     sa.Column('vless_link', sa.String(length=500), nullable=True, comment='vless ссылка ключа. Важен как кэш, чтобы уменьшить количество запросов к xui.'),
     sa.CheckConstraint('end_at >= start_at', name='ck_access_keys_end_after_start'),
     sa.ForeignKeyConstraint(['plan_id'], ['plans.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['server_id'], ['servers.id'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_access_keys_end_at'), 'access_keys', ['end_at'], unique=False)
     op.create_index(op.f('ix_access_keys_plan_id'), 'access_keys', ['plan_id'], unique=False)
+    op.create_index(op.f('ix_access_keys_server_id'), 'access_keys', ['server_id'], unique=False)
     op.create_index(op.f('ix_access_keys_user_id'), 'access_keys', ['user_id'], unique=False)
     op.create_table('payments',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -122,12 +144,16 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_payments_action'), table_name='payments')
     op.drop_table('payments')
     op.drop_index(op.f('ix_access_keys_user_id'), table_name='access_keys')
+    op.drop_index(op.f('ix_access_keys_server_id'), table_name='access_keys')
     op.drop_index(op.f('ix_access_keys_plan_id'), table_name='access_keys')
     op.drop_index(op.f('ix_access_keys_end_at'), table_name='access_keys')
     op.drop_table('access_keys')
     op.drop_index(op.f('ix_users_tg_id'), table_name='users')
     op.drop_index(op.f('ix_users_is_blocked'), table_name='users')
     op.drop_table('users')
+    op.drop_index(op.f('ix_servers_is_active'), table_name='servers')
+    op.drop_index(op.f('ix_servers_created_at'), table_name='servers')
+    op.drop_table('servers')
     op.drop_index('uq_plan_vip_once', table_name='plans', postgresql_where=sa.text("plan_type = 'VIP'"))
     op.drop_index('uq_plan_trial_once', table_name='plans', postgresql_where=sa.text("plan_type = 'TRIAL'"))
     op.drop_index(op.f('ix_plans_plan_type'), table_name='plans')

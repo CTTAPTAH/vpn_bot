@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from application.ports.unit_of_work import AbstractUnitOfWork
-from application.ports.vpn_gateway import VpnGateway
+from application.ports.vpn.gateway_factory import AbstractVpnGatewayFactory
 from application.errors.vpn_errors import (
     VpnKeyNotFoundError,
     VpnGatewayError
@@ -14,6 +14,7 @@ from domain.entities.audit_log import AuditLog
 class DeleteKeyErrorType(StrEnum):
     """Тип ошибки при удалении ключа."""
     KEY_NOT_FOUND = "KEY_NOT_FOUND"
+    SERVER_NOT_FOUND = "SERVER_NOT_FOUND"
     UNKNOWN_ERROR = "UNKNOWN_ERROR"
 
 @dataclass(slots=True)
@@ -24,9 +25,9 @@ class DeleteKeyResult:
 
 class DeleteKeyUseCase:
     """Сценарий удаления ключа пользователя."""
-    def __init__(self, uow: AbstractUnitOfWork, vpn: VpnGateway):
+    def __init__(self, uow: AbstractUnitOfWork, gateway_factory: AbstractVpnGatewayFactory):
         self._uow = uow
-        self._vpn = vpn
+        self._gateway_factory = gateway_factory
 
     async def execute(self, tg_id: int, key_id: int) -> DeleteKeyResult:
         """Удалить ключ пользователя."""
@@ -35,10 +36,26 @@ class DeleteKeyUseCase:
             if key is None:
                 return DeleteKeyResult(success=False, error_type=DeleteKeyErrorType.KEY_NOT_FOUND)
             await uow.keys.delete(key_id)
+            server_id = key.id
 
         try:
+            async with self._uow as uow:
+                server = await uow.servers.get_by_id(server_id)
+                if server is None:
+                    await uow.audits.add(
+                        AuditLog(
+                            level=AuditLevel.ERROR,
+                            event_type=AuditEventType.SERVER_NOT_FOUND,
+                            message=(
+                                f"Во время удаления ключа не удалось найти сервер в БД. "
+                                f"server_id={server_id}, tg_id={tg_id}"
+                            )
+                        )
+                    )
+                    return DeleteKeyResult(success=False, error_type=DeleteKeyErrorType.SERVER_NOT_FOUND)
+            vpn = await self._gateway_factory.get_gateway(server)
             email = str(key_id)
-            await self._vpn.delete_key(email)
+            await vpn.delete_key(email)
 
         except VpnKeyNotFoundError:
             async with self._uow as uow:

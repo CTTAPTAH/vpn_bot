@@ -7,7 +7,7 @@
 from aiogram import types
 from typing import Callable, Awaitable
 
-from app.container import get_vpn_gateway, build_uow
+from app.container import get_vpn_gateway_factory, build_uow
 from application.use_cases.get_main_menu import GetMainMenuUseCase
 from application.use_cases.get_available_plans import GetAvailablePlansUseCase
 from application.use_cases.create_payment import CreatePaymentUseCase
@@ -18,8 +18,8 @@ from application.use_cases.extend_trial import ExtendTrialUseCase
 from application.use_cases.user_keys import GetUserKeysUseCase
 from application.use_cases.selected_key import GetSelectedKeyUseCase
 from application.use_cases.get_key_for_deletion import GetKeyForDeletionUseCase
+from application.services.server_selection import ServerSelectionService
 from presentation.telegram.states.states import Screen
-from presentation.telegram.texts.branding import SERVER_NAME
 import presentation.telegram.texts.texts as texts
 import presentation.telegram.keyboards.keyboards as keyboards
 import presentation.telegram.callbacks.callbacks as callbacks
@@ -88,12 +88,11 @@ async def show_purchase_pending(callback_query: types.CallbackQuery, callback_da
         )
 
 async def show_purchase_success(callback_query: types.CallbackQuery, callback_data: callbacks.PurchaseSuccessCallback):
-    use_case = ConfirmPaymentUseCase(build_uow(), get_vpn_gateway())
+    use_case = ConfirmPaymentUseCase(build_uow(), get_vpn_gateway_factory(), ServerSelectionService())
     result = await use_case.execute(
         tg_id=callback_query.from_user.id,
         username=callback_query.from_user.username,
         payment_id=callback_data.payment_id,
-        server_name=SERVER_NAME,
         key_id=callback_data.key_id
     )
 
@@ -111,8 +110,8 @@ async def show_purchase_success(callback_query: types.CallbackQuery, callback_da
 
 # Пробный период
 async def show_trial(callback_query: types.CallbackQuery):
-    use_case = ActiveTrialUseCase(build_uow(), get_vpn_gateway())
-    result = await use_case.execute(callback_query.from_user.id, callback_query.from_user.username, SERVER_NAME)
+    use_case = ActiveTrialUseCase(build_uow(), get_vpn_gateway_factory(), ServerSelectionService())
+    result = await use_case.execute(callback_query.from_user.id, callback_query.from_user.username)
 
     if isinstance(result, ActiveTrialError):
         await callback_query.message.edit_text(
@@ -131,7 +130,7 @@ async def show_trial(callback_query: types.CallbackQuery):
         )
 
 async def show_extend_trial(callback_query: types.CallbackQuery, callback_data: callbacks.ExtendTrialCallback):
-    use_case = ExtendTrialUseCase(build_uow(), get_vpn_gateway())
+    use_case = ExtendTrialUseCase(build_uow(), get_vpn_gateway_factory())
     result = await use_case.execute(
         tg_id=callback_query.from_user.id,
         username=callback_query.from_user.username,
@@ -160,8 +159,8 @@ async def show_my_keys(callback_query: types.CallbackQuery):
     )
 
 async def show_selected_key(callback_query: types.CallbackQuery, callback_data: callbacks.SelectedKeyCallback):
-    use_case = GetSelectedKeyUseCase(build_uow(), get_vpn_gateway())
-    result = await use_case.execute(callback_data.key_id, callback_query.from_user.id, SERVER_NAME)
+    use_case = GetSelectedKeyUseCase(build_uow())
+    result = await use_case.execute(callback_data.key_id, callback_query.from_user.id)
 
     if result.success:
         await callback_query.message.edit_text(

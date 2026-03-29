@@ -16,6 +16,13 @@ class AccessKeyView:
     end_at: datetime
     vless_link: str
 
+@dataclass
+class ServerKeysLoad:
+    """Количество ключей на каждом сервере и лимит по ключам на сервере."""
+    server_id: int
+    keys_count: int
+    max_clients: int
+
 class AbstractAccessKeyRepository(ABC):
     """
     Контракт репозитория ключа доступа.
@@ -48,6 +55,10 @@ class AbstractAccessKeyRepository(ABC):
 
     @abstractmethod
     async def count_active_keys(self, user_id: int, now: datetime) -> int:
+        ...
+
+    @abstractmethod
+    async def get_servers_keys_load(self, server_ids: list[int]) -> list[ServerKeysLoad]:
         ...
 
     @abstractmethod

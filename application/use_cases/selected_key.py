@@ -4,8 +4,6 @@ from enum import StrEnum
 
 from application.common.dto import KeyDTO
 from application.ports.unit_of_work import AbstractUnitOfWork
-from application.ports.vpn_gateway import VpnGateway
-from infrastructure.xui.exceptions import XuiError
 from domain.entities.audit_log import AuditLog
 from domain.enums import AuditLevel, AuditEventType
 from core.utils import utcnow
@@ -25,11 +23,10 @@ class SelectedKeyResult:
 
 class GetSelectedKeyUseCase:
     """Сценарий получения данных о ключе пользователя."""
-    def __init__(self, uow: AbstractUnitOfWork, vpn: VpnGateway):
+    def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow
-        self._vpn = vpn
 
-    async def execute(self, key_id: int, tg_id: int, server_name: str) -> SelectedKeyResult:
+    async def execute(self, key_id: int, tg_id: int) -> SelectedKeyResult:
         now = utcnow()
 
         # Поиск ключа в БД
@@ -49,40 +46,6 @@ class GetSelectedKeyUseCase:
                 )
                 return SelectedKeyResult(success=False, error_type=SelectedKeyErrorType.NOT_FOUND_IN_DB)
 
-            # Поиск ключа в xui
-            vpn_key_id = str(key.id)
-            try:
-                # Если ключ не создан в xui, то создаём аудит ошибки
-                if not await self._vpn.is_client_exists(vpn_key_id):
-                    await uow.audits.add(
-                        AuditLog(
-                            level=AuditLevel.ERROR,
-                            event_type=AuditEventType.KEY_NOT_FOUND_IN_VPN,
-                            message=(
-                                f"Не удалось выдать информацию о ключе.\n"
-                                f"Ключ не найден в xui.\n"
-                                f"(key_id={vpn_key_id}, tg_id={tg_id})."
-                            )
-                        )
-                    )
-                    return SelectedKeyResult(success=False, error_type=SelectedKeyErrorType.NOT_FOUND_IN_VPN)
-
-                # Иначе проблем нет и получаем vless ссылку пользователя
-                vless = await self._vpn.get_link(vpn_key_id, server_name)
-            except XuiError as e:
-                await uow.audits.add(
-                    AuditLog(
-                        level=AuditLevel.ERROR,
-                        event_type=AuditEventType.VPN_ERROR,
-                        message=(
-                            f"Не удалось выдать информацию о ключе.\n"
-                            f"(key_id={vpn_key_id}, tg_id={tg_id}).\n"
-                            f"Ошибка: {e}."
-                        )
-                    )
-                )
-                return SelectedKeyResult(success=False, error_type=SelectedKeyErrorType.VPN_ERROR)
-
         return SelectedKeyResult(
             success=True,
             key=KeyDTO(
@@ -91,5 +54,5 @@ class GetSelectedKeyUseCase:
                 end_at=key.end_at,
                 is_expired=now > key.end_at
             ),
-            vless=vless
+            vless=key.vless_link
         )

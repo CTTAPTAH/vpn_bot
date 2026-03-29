@@ -13,6 +13,10 @@ class AbstractUserRepository(ABC):
         ...
 
     @abstractmethod
+    async def get_by_id_for_update(self, user_id: int) -> User | None:
+        ...
+
+    @abstractmethod
     async def get_by_tg_id(self, tg_id: int) -> User | None:
         ...
 

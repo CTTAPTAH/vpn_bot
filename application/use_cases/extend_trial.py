@@ -4,7 +4,8 @@ from enum import StrEnum
 from datetime import datetime, timedelta
 
 from application.ports.unit_of_work import AbstractUnitOfWork
-from application.ports.vpn_gateway import VpnGateway
+from application.ports.vpn.gateway_factory import AbstractVpnGatewayFactory
+from application.errors.vpn_errors import VpnGatewayError, VpnKeyNotFoundError
 from domain.entities.audit_log import AuditLog
 from domain.entities.access_key import AccessKey
 from domain.entities.payment import Payment
@@ -27,9 +28,10 @@ class ExtendTrialResult:
 
 class ExtendTrialUseCase:
     """Сценарий выдачи/возврата результата пробного периода."""
-    def __init__(self, uow: AbstractUnitOfWork, vpn: VpnGateway):
+
+    def __init__(self, uow: AbstractUnitOfWork, gateway_factory: AbstractVpnGatewayFactory):
         self._uow = uow
-        self._vpn = vpn
+        self._gateway_factory = gateway_factory
 
     async def execute(self, tg_id: int, username: str, key_id: int) -> ExtendTrialResult:
         """Продлить пробный период."""
@@ -89,7 +91,7 @@ class ExtendTrialUseCase:
                 plan.price
             )
 
-        vpn_ok = await self._sync_vpn(uow, key.id, expiry_time)
+        vpn_ok = await self._sync_vpn(uow, key.id, key.server_id, expiry_time, tg_id)
         if not vpn_ok:
             return ExtendTrialResult(False, ExtendTrialErrorType.VPN_SYNC_FAILED)
 
@@ -143,23 +145,38 @@ class ExtendTrialUseCase:
         await uow.payments.add(payment)
         return payment
 
-    async def _sync_vpn(self, uow: AbstractUnitOfWork, key_id: int, expiry_time: datetime) -> bool:
+    async def _sync_vpn(self, uow: AbstractUnitOfWork, key_id: int, server_id: int,
+                        expiry_time: datetime, tg_id: int) -> bool:
         try:
+            async with self._uow as uow:
+                server = await uow.servers.get_by_id(server_id)
+                if server is None:
+                    await uow.audits.add(
+                        AuditLog(
+                            level=AuditLevel.ERROR,
+                            event_type=AuditEventType.SERVER_NOT_FOUND,
+                            message=(
+                                f"Во время удаления ключа не удалось найти сервер в БД. "
+                                f"server_id={server_id}, tg_id={tg_id}"
+                            )
+                        )
+                    )
+                    return False
+            vpn = await self._gateway_factory.get_gateway(server)
             vpn_email = str(key_id)
-
-            if not await self._vpn.is_client_exists(vpn_email):
-                await self._audit(
-                    uow,
-                    AuditLevel.ERROR,
-                    AuditEventType.KEY_NOT_FOUND_IN_VPN,
-                    f"Синхронизация пробного периода с vpn не удалась. Ключ не найден. key_id={key_id}"
-                )
-                return False
-
-            await self._vpn.update_expiry(vpn_email, expiry_time)
+            await vpn.update_expiry(vpn_email, expiry_time)
             return True
 
-        except Exception as e:
+        except VpnKeyNotFoundError:
+            await self._audit(
+                uow,
+                AuditLevel.ERROR,
+                AuditEventType.KEY_NOT_FOUND_IN_VPN,
+                f"Синхронизация пробного периода с vpn не удалась. Ключ не найден. key_id={key_id}"
+            )
+            return False
+
+        except VpnGatewayError as e:
             await self._audit(
                 uow,
                 AuditLevel.ERROR,

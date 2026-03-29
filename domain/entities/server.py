@@ -3,16 +3,21 @@ from datetime import datetime
 from core.utils import utcnow
 
 @dataclass
-class AccessKey:
+class Server:
     """Доменная модель ключа доступа.
 
     Это бизнес-сущность.
     Она не зависит от ORM и базы данных.
     """
-    user_id: int
-    plan_id: int
-    server_id: int
-    end_at: datetime
+    name: str
+    panel_url: str
+    panel_username: str
+    panel_password: str
+    host: str
+    inbound_id: int
+    default_key_name: str
+    max_clients: int
     id: int | None = None
-    start_at: datetime = field(default_factory=utcnow)
-    vless_link: str | None = None
+    inbound_name: str | None = None
+    is_active: bool = True
+    created_at: datetime = field(default_factory=utcnow)

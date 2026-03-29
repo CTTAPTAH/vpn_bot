@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from domain.entities.user import User as DomainUser
 from application.ports.repositories.user_repository import AbstractUserRepository
@@ -23,6 +24,17 @@ class SQLAlchemyUserRepository(AbstractUserRepository):
     async def get_by_id(self, user_id: int) -> DomainUser | None:
         """Получение пользователя по его id."""
         stmt = select(ORMUser).where(ORMUser.id == user_id)
+        result = await self._session.execute(stmt)
+        orm_user = result.scalar_one_or_none()
+
+        if orm_user is None:
+            return None
+
+        return to_domain(orm_user)
+
+    async def get_by_id_for_update(self, user_id: int) -> DomainUser | None:
+        """Получение пользователя по его id."""
+        stmt = select(ORMUser).where(ORMUser.id == user_id).with_for_update()
         result = await self._session.execute(stmt)
         orm_user = result.scalar_one_or_none()
 
@@ -59,7 +71,11 @@ class SQLAlchemyUserRepository(AbstractUserRepository):
             tg_id=tg_id,
             username=username
         )
-        await self.add(domain_user)
+        try:
+            async with self._session.begin_nested():
+                await self.add(domain_user)
+        except IntegrityError:
+            return await self.get_by_tg_id(tg_id)
 
         return domain_user
 
