@@ -2,6 +2,7 @@
 Тексты, которые используются в боте при составлении сообщения
 """
 import presentation.telegram.texts.branding as branding
+import presentation.telegram.links.links as links
 from presentation.telegram.texts.plan_presentation import PLAN_PRESENTATION_BY_MONTHS, PlanPresentation
 from application.use_cases.get_available_plans import PlanDTO
 from application.common.dto import KeyDTO
@@ -23,6 +24,26 @@ def txt_main(active_keys: int | str) -> str:
 🔑 <b>Активных ключей:</b> {active_keys}
 
 Выберите действие ниже ⬇️"""
+
+def txt_agreement() -> str:
+    return f"""📄 <b>Политика обработки персональных данных и оферта</b>
+
+Перед использованием <b>{branding.VPN_NAME}</b> необходимо ознакомиться с нашими документами и подтвердить согласие:
+
+- <a href="{links.DATA_PROCESSING_POLICY}">Политика обработки персональных данных</a>
+- <a href="{links.PUBLIC_OFFER}">Оферта</a>
+
+Нажмите ✅ ниже, если вы согласны с условиями и хотите продолжить использование бота."""
+
+def txt_view_agreement() -> str:
+    return f"""📄 <b>Политика обработки персональных данных и оферта</b>
+
+Вы можете в любой момент ознакомиться с документами <b>{branding.VPN_NAME}</b>:
+
+- <a href="{links.DATA_PROCESSING_POLICY}">Политика обработки персональных данных</a>
+- <a href="{links.PUBLIC_OFFER}">Оферта</a>
+
+Нажмите «⬅️ Назад», чтобы вернуться в главное меню."""
 
 # Тарифы, покупка
 def txt_plans(plans: list[PlanDTO]) -> str:

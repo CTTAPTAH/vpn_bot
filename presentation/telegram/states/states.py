@@ -17,6 +17,7 @@ class Screen(StrEnum):
 
     # ===== Главное меню =====
     MAIN = "main"
+    VIEW_AGREEMENT = "view_agreement"
 
     # Тарифы, покупка
     PLANS = "plans"

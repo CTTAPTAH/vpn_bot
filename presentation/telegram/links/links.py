@@ -1,6 +1,11 @@
 """В файле храним ссылки, которые ведут на другие ресурсы."""
 from urllib.parse import quote_plus
 
+# Документы
+DATA_PROCESSING_POLICY = "https://disk.yandex.ru/i/S7m4KlCaBTOHdw"
+PUBLIC_OFFER = "https://disk.yandex.ru/i/zs4hvz6Ev8Lxzg"
+
+# Deeplink
 VPN_HOST = "171.22.30.206"
 def v2raytun_deeplink(vless: str) -> str:
     """Генерирует deeplink для  v2RayTun."""

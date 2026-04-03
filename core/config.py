@@ -20,6 +20,7 @@ def _require(value: str, name: str) -> str:
 BOT_TOKEN = _require(os.getenv("BOT_TOKEN"), "BOT_TOKEN")
 MAX_KEYS_PER_USER = 5
 MAX_DEVICE_PER_KEY = 3
+ADMIN_ID = 1047159348
 
 # Retry XUI
 XUI_RETRY_ATTEMPTS = 3

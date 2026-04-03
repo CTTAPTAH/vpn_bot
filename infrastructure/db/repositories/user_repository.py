@@ -13,6 +13,7 @@ def to_domain(orm_user: ORMUser) -> DomainUser:
         username=orm_user.username,
         created_at=orm_user.created_at,
         is_blocked=orm_user.is_blocked,
+        agreed_to_policy=orm_user.agreed_to_policy
     )
 
 class SQLAlchemyUserRepository(AbstractUserRepository):
@@ -86,6 +87,7 @@ class SQLAlchemyUserRepository(AbstractUserRepository):
             username=user.username,
             created_at=user.created_at,
             is_blocked=user.is_blocked,
+            agreed_to_policy=user.agreed_to_policy
         )
         self._session.add(orm_user)
         await self._session.flush()
@@ -101,3 +103,4 @@ class SQLAlchemyUserRepository(AbstractUserRepository):
 
         orm_user.username = user.username
         orm_user.is_blocked = user.is_blocked
+        orm_user.agreed_to_policy = user.agreed_to_policy

@@ -6,6 +6,7 @@ from core.utils import utcnow
 
 @dataclass(slots=True)
 class MainMenuDTO:
+    agreed_to_policy: bool
     active_keys: int
     trial_used: bool
 
@@ -19,7 +20,8 @@ class GetMainMenuUseCase:
             user = await uow.users.get_or_create(tg_id, username)
 
             now = utcnow()
+            agreed_to_policy = user.agreed_to_policy
             trial_used = await uow.payments.has_trial(user.id)
             active_keys = await uow.keys.count_active_keys(user.id, now)
 
-        return MainMenuDTO(active_keys=active_keys, trial_used=trial_used)
+        return MainMenuDTO(agreed_to_policy=agreed_to_policy, active_keys=active_keys, trial_used=trial_used)

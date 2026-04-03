@@ -16,9 +16,11 @@ Application-слой должен зависеть только от этой а
 from abc import ABC, abstractmethod
 from application.ports.repositories.access_key_repository import AbstractAccessKeyRepository
 from application.ports.repositories.audit_log_repository import AbstractAuditLogRepository
+from application.ports.repositories.message_repository import AbstractMessageRepository
 from application.ports.repositories.payment_repository import AbstractPaymentRepository
 from application.ports.repositories.plan_repository import AbstractPlanRepository
 from application.ports.repositories.server_repository import AbstractServerRepository
+from application.ports.repositories.ticket_repository import AbstractTicketRepository
 from application.ports.repositories.user_repository import AbstractUserRepository
 
 class AbstractUnitOfWork(ABC):
@@ -36,6 +38,8 @@ class AbstractUnitOfWork(ABC):
     payments: AbstractPaymentRepository
     servers: AbstractServerRepository
     audits: AbstractAuditLogRepository
+    tickets: AbstractTicketRepository
+    messages: AbstractMessageRepository
 
     @abstractmethod
     async def __aenter__(self)  -> "AbstractUnitOfWork":

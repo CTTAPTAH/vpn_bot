@@ -40,6 +40,18 @@ class AuditLevel(StrEnum):
     WARNING = "WARNING"
     ERROR = "ERROR"
 
+# Обращение в поддержку
+class TicketStatus(StrEnum):
+    """Статус обращения пользователя в БД."""
+    OPEN = "OPEN"
+    CLOSE = "CLOSED"
+
+# Сообщение в поддержку
+class MessageSenderType(StrEnum):
+    """Отправитель сообщения."""
+    SUPPORT = "SUPPORT"
+    USER = "USER"
+
 class AuditEventType(StrEnum):
     """Тип действия, который записывается в аудит."""
     # Платёж

@@ -49,11 +49,22 @@ def kb_main(has_trial: bool = False) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text="🎁 Пробный период", callback_data=Screen.TRIAL)])
 
     buttons.append(
-        [InlineKeyboardButton(text="📱 Как настроить защищённое подключение", callback_data=Screen.INSTRUCTION)]
+        [InlineKeyboardButton(text="📱 Настроить защищённое подключение", callback_data=Screen.INSTRUCTION)]
     )
     buttons.append([BTN_HELP])
+    buttons.append([InlineKeyboardButton(text="📄 Оферта / Политика", callback_data=Screen.VIEW_AGREEMENT)])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def kb_agreement() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Согласен", callback_data=Action.AGREE)]
+    ])
+
+def kb_view_agreement() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [BTN_BACK]
+    ])
 
 # Тарифы, покупка
 def kb_plans(action: enums.PaymentAction, plans: list[PlanDTO],

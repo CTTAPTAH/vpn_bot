@@ -1,8 +1,8 @@
 """Инициализация БД
 
-Revision ID: 8d200b1e5edb
+Revision ID: 8a29bd7dec65
 Revises: 
-Create Date: 2026-03-28 17:25:31.732779
+Create Date: 2026-04-03 15:11:27.181446
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '8d200b1e5edb'
+revision: str = '8a29bd7dec65'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -75,6 +75,7 @@ def upgrade() -> None:
     sa.Column('username', sa.String(length=50), nullable=True, comment='Username пользователя в Telegram (может отсутствовать).'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Дата и время (UTC) регистрации пользователя.'),
     sa.Column('is_blocked', sa.Boolean(), server_default=sa.text('false'), nullable=False, comment='Флаг блокировки пользователя.'),
+    sa.Column('agreed_to_policy', sa.Boolean(), server_default=sa.text('false'), nullable=False, comment='Согласен ли пользователь на обработку персональных данных и оферту.'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_is_blocked'), 'users', ['is_blocked'], unique=False)
@@ -97,6 +98,30 @@ def upgrade() -> None:
     op.create_index(op.f('ix_access_keys_plan_id'), 'access_keys', ['plan_id'], unique=False)
     op.create_index(op.f('ix_access_keys_server_id'), 'access_keys', ['server_id'], unique=False)
     op.create_index(op.f('ix_access_keys_user_id'), 'access_keys', ['user_id'], unique=False)
+    op.create_table('tickets',
+    sa.Column('id', sa.Integer(), nullable=False, comment='Уникальный идентификатор обращения в поддержку (PK).'),
+    sa.Column('user_id', sa.Integer(), nullable=False, comment='id пользователя, который отправил это обращение.'),
+    sa.Column('status', sa.Enum('OPEN', 'CLOSE', name='ticketstatus', native_enum=False), nullable=False, comment='Статус обращения: открыт, закрыт'),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Время создания обращения.'),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_tickets_created_at'), 'tickets', ['created_at'], unique=False)
+    op.create_index(op.f('ix_tickets_user_id'), 'tickets', ['user_id'], unique=False)
+    op.create_index('uq_ticket_user_single_open', 'tickets', ['user_id'], unique=True, postgresql_where=sa.text("status = 'OPEN'"))
+    op.create_table('messages',
+    sa.Column('id', sa.Integer(), nullable=False, comment='Уникальный идентификатор сообщения в поддержку (PK).'),
+    sa.Column('ticket_id', sa.Integer(), nullable=False, comment='id обращения в поддержку.'),
+    sa.Column('sender_type', sa.Enum('SUPPORT', 'USER', name='messagesendertype', native_enum=False), nullable=False, comment='Отправитель сообщения: SUPPORT, USER.'),
+    sa.Column('text', sa.Text(), nullable=False, comment='Сообщение отправителя.'),
+    sa.Column('telegram_message_id', sa.Integer(), nullable=False, comment='id сообщения в телеграмм, под которым пришло админу.'),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Время создания сообщения.'),
+    sa.ForeignKeyConstraint(['ticket_id'], ['tickets.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_messages_created_at'), 'messages', ['created_at'], unique=False)
+    op.create_index('ix_messages_ticket_created', 'messages', ['ticket_id', 'created_at'], unique=False)
+    op.create_index(op.f('ix_messages_ticket_id'), 'messages', ['ticket_id'], unique=False)
     op.create_table('payments',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False, comment='Пользователь, совершивший платеж.'),
@@ -143,6 +168,14 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_payments_created_at'), table_name='payments')
     op.drop_index(op.f('ix_payments_action'), table_name='payments')
     op.drop_table('payments')
+    op.drop_index(op.f('ix_messages_ticket_id'), table_name='messages')
+    op.drop_index('ix_messages_ticket_created', table_name='messages')
+    op.drop_index(op.f('ix_messages_created_at'), table_name='messages')
+    op.drop_table('messages')
+    op.drop_index('uq_ticket_user_single_open', table_name='tickets', postgresql_where=sa.text("status = 'OPEN'"))
+    op.drop_index(op.f('ix_tickets_user_id'), table_name='tickets')
+    op.drop_index(op.f('ix_tickets_created_at'), table_name='tickets')
+    op.drop_table('tickets')
     op.drop_index(op.f('ix_access_keys_user_id'), table_name='access_keys')
     op.drop_index(op.f('ix_access_keys_server_id'), table_name='access_keys')
     op.drop_index(op.f('ix_access_keys_plan_id'), table_name='access_keys')

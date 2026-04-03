@@ -30,9 +30,24 @@ async def show_main(callback_query: types.CallbackQuery):
     use_case = GetMainMenuUseCase(build_uow())
     dto = await use_case.execute(callback_query.from_user.id, callback_query.from_user.username)
 
+    if not dto.agreed_to_policy:
+        await callback_query.message.edit_text(
+            texts.txt_agreement(),
+            reply_markup=keyboards.kb_agreement(),
+            disable_web_page_preview=True
+        )
+
+    else:
+        await callback_query.message.edit_text(
+            texts.txt_main(dto.active_keys),
+            reply_markup=keyboards.kb_main(not dto.trial_used)
+        )
+
+async def show_view_agreement(callback_query: types.CallbackQuery):
     await callback_query.message.edit_text(
-        texts.txt_main(dto.active_keys),
-        reply_markup=keyboards.kb_main(not dto.trial_used)
+        texts.txt_view_agreement(),
+        reply_markup=keyboards.kb_view_agreement(),
+        disable_web_page_preview=True
     )
 
 # Тарифы, покупка
@@ -173,7 +188,6 @@ async def show_selected_key(callback_query: types.CallbackQuery, callback_data: 
             reply_markup=keyboards.kb_error()
         )
 
-
 async def show_confirm_delete_key(callback_query: types.CallbackQuery,
                                   callback_data: callbacks.ConfirmDeleteKeyCallback):
     use_case = GetKeyForDeletionUseCase(build_uow())
@@ -189,7 +203,6 @@ async def show_confirm_delete_key(callback_query: types.CallbackQuery,
             texts.txt_unknown_error(),
             reply_markup=keyboards.kb_error()
         )
-
 
 # Поддержка
 async def show_help(callback_query: types.CallbackQuery):
@@ -217,10 +230,16 @@ async def show_problems_apple(callback_query: types.CallbackQuery):
     await callback_query.message.edit_text(texts.txt_problems_apple(), reply_markup=keyboards.kb_problems_apple())
 
 async def show_no_connection_apple(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_no_connection_apple(), reply_markup=keyboards.kb_no_connection_apple())
+    await callback_query.message.edit_text(
+        texts.txt_no_connection_apple(),
+        reply_markup=keyboards.kb_no_connection_apple()
+    )
 
 async def show_second_method_apple(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_second_method_apple(), reply_markup=keyboards.kb_second_method_apple())
+    await callback_query.message.edit_text(
+        texts.txt_second_method_apple(),
+        reply_markup=keyboards.kb_second_method_apple()
+    )
 
 # ANDROID
 async def show_android(callback_query: types.CallbackQuery):
@@ -231,14 +250,24 @@ async def show_problems_android(callback_query: types.CallbackQuery):
     await callback_query.message.edit_text(texts.txt_problems_android(), reply_markup=keyboards.kb_problems_android())
 
 async def show_no_connection_android(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_no_connection_android(), reply_markup=keyboards.kb_no_connection_android())
+    await callback_query.message.edit_text(
+        texts.txt_no_connection_android(),
+        reply_markup=keyboards.kb_no_connection_android()
+    )
 
 async def show_second_method_android(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_second_method_android(), reply_markup=keyboards.kb_second_method_android())
+    await callback_query.message.edit_text(
+        texts.txt_second_method_android(),
+        reply_markup=keyboards.kb_second_method_android()
+    )
 
 # WINDOWS
 async def show_windows(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_windows(), reply_markup=keyboards.kb_windows())
+    await callback_query.message.edit_text(
+        texts.txt_windows(),
+        reply_markup=keyboards.kb_windows(),
+        disable_web_page_preview=True
+    )
 
 async def show_pc_apps(callback_query: types.CallbackQuery):
     await callback_query.message.edit_text(texts.txt_pc_apps(), reply_markup=keyboards.kb_pc_apps())
@@ -258,12 +287,16 @@ async def show_huawei(callback_query: types.CallbackQuery):
     await callback_query.message.edit_text(texts.txt_huawei(), reply_markup=keyboards.kb_huawei())
 
 async def show_second_method_huawei(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_second_method_huawei(), reply_markup=keyboards.kb_second_method_huawei())
+    await callback_query.message.edit_text(
+        texts.txt_second_method_huawei(),
+        reply_markup=keyboards.kb_second_method_huawei()
+    )
 
 ScreenHandler = Callable[..., Awaitable[None]]
 screens: dict[Screen, ScreenHandler] = {
     # ===== Главное меню =====
     Screen.MAIN: show_main,
+    Screen.VIEW_AGREEMENT: show_view_agreement,
 
     # Тарифы, покупка
     Screen.PLANS: show_plans,

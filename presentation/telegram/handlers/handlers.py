@@ -8,6 +8,9 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 
 from application.use_cases.get_main_menu import GetMainMenuUseCase
+from application.use_cases.create_or_append_user_ticket_message import CreateOrAppendUserTicketMessage
+from application.use_cases.admin_reply_to_ticket import AdminReplyToTicket
+from presentation.telegram.bot import bot
 from presentation.telegram.navigation.navigation import go_to, go_back, go_back_to
 from presentation.telegram.states.states import Screen
 from presentation.telegram.enums import Action
@@ -17,6 +20,7 @@ import presentation.telegram.texts.texts as texts
 import presentation.telegram.keyboards.keyboards as keyboards
 import presentation.telegram.actions.actions as actions
 import app.container as container
+import core.config as config
 
 def register_handlers():
    """Создаёт и настраивает Router с обработчиками."""
@@ -28,11 +32,19 @@ def register_handlers():
       use_case = GetMainMenuUseCase(container.build_uow())
       dto = await use_case.execute(message.from_user.id, message.from_user.username)
 
-      await message.answer(
-         texts.txt_main(dto.active_keys),
-         reply_markup=keyboards.kb_main(not dto.trial_used)
-      )
-      state_manager.push_state(message.from_user.id, Screen.MAIN)
+      if not dto.agreed_to_policy:
+         await message.answer(
+            texts.txt_agreement(),
+            reply_markup=keyboards.kb_agreement(),
+            disable_web_page_preview=True
+         )
+
+      else:
+         await message.answer(
+            texts.txt_main(dto.active_keys),
+            reply_markup=keyboards.kb_main(not dto.trial_used)
+         )
+         state_manager.push_state(message.from_user.id, Screen.MAIN)
       await message.delete()
 
    # Кнопка назад
@@ -48,6 +60,15 @@ def register_handlers():
    @router.callback_query(F.data == Screen.MAIN)
    async def process_main(callback_query: types.CallbackQuery):
       await go_to(callback_query, Screen.MAIN, reset=True)
+
+   @router.callback_query(F.data == Action.AGREE)
+   async def process_agree(callback_query: types.CallbackQuery):
+      await actions.agreement_with_policy(callback_query)
+      await go_to(callback_query, Screen.MAIN)
+
+   @router.callback_query(F.data == Screen.VIEW_AGREEMENT)
+   async def process_view_agreement(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.VIEW_AGREEMENT)
 
    # Тарифы, покупка
    @router.callback_query(callbacks.PlansCallback.filter())
@@ -114,6 +135,41 @@ def register_handlers():
    @router.callback_query(F.data == Screen.MY_REQUESTS)
    async def process_my_requests(callback_query: types.CallbackQuery):
       await go_to(callback_query, Screen.MY_REQUESTS)
+
+   @router.message()
+   async def handle_messages(message: types.Message):
+      user_id = message.from_user.id
+      state = state_manager.get_state(user_id)
+
+      if state is None or state.screen != Screen.REQUEST_HELP:
+         if message.from_user.id != config.ADMIN_ID:
+            return
+
+         if not message.reply_to_message:
+            return
+
+         reply_to_message_id = message.reply_to_message.message_id
+
+         use_case = AdminReplyToTicket(container.build_uow())
+         user_id = await use_case.execute(reply_to_message_id, message.text)
+         await bot.send_message(
+            chat_id=user_id,
+            text=f"Ответ поддержки.\n{message.text}"
+         )
+         return
+
+      if not message.text:
+         await message.answer("Поддерживаются только текстовые сообщения")
+         return
+
+      await message.answer("Сообщение отправлено! Ожидайте ответа.")
+      admin_msg = await bot.send_message(
+         chat_id=config.ADMIN_ID,
+         text=message.text
+      )
+
+      use_case = CreateOrAppendUserTicketMessage(container.build_uow())
+      await use_case.execute(user_id, message.from_user.username, message.text, admin_msg.message_id)
 
    # ===== Инструкции =====
    @router.callback_query(F.data == Screen.INSTRUCTION)

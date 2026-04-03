@@ -32,7 +32,8 @@ async def go_to(callback_query: types.CallbackQuery, screen: Screen,
             else:
                 await handler(callback_query)
 
-            state_manager.push_state(user_id, screen, data)
+            if state_manager.get_state(user_id) != screen:
+                state_manager.push_state(user_id, screen, data)
         except Exception:
             # лог
             raise

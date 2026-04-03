@@ -48,3 +48,10 @@ class User(Base):
         index=True,
         comment="Флаг блокировки пользователя."
     )
+
+    agreed_to_policy: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default=text("false"),
+        nullable=False,
+        comment="Согласен ли пользователь на обработку персональных данных и оферту."
+    )
