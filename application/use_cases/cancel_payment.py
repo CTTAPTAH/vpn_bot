@@ -2,9 +2,9 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from application.use_cases.base_use_case import BaseUseCase
 from application.ports.unit_of_work import AbstractUnitOfWork
 from domain.enums import AuditLevel, AuditEventType, PaymentStatus
-from domain.entities.audit_log import AuditLog
 
 class CancelPaymentErrorType(StrEnum):
     """Тип ошибки при отмене платежа."""
@@ -15,7 +15,7 @@ class CancelPaymentResult:
     success: bool
     error: CancelPaymentErrorType | None = None
 
-class CancelPaymentUseCase:
+class CancelPaymentUseCase(BaseUseCase):
     """Сценарий отмены платежа."""
     def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow
@@ -33,7 +33,9 @@ class CancelPaymentUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.PAYMENT_NOT_FOUND,
-                    f"Пользователь попытался отменить платёж, но платёж не найден. tg_id={tg_id}."
+                    f"[CancelPaymentUseCase][execute]\n"
+                    f"Платёж не найден.\n"
+                    f"tg_id={tg_id}."
                 )
                 return CancelPaymentResult(success=False, error=CancelPaymentErrorType.PAYMENT_NOT_FOUND)
 
@@ -45,16 +47,9 @@ class CancelPaymentUseCase:
                 uow,
                 AuditLevel.INFO,
                 AuditEventType.PAYMENT_CANCELLED,
-                f"Пользователь успешно отменил платёж. tg_id={tg_id}, payment_id={payment.id}."
+                f"[CancelPaymentUseCase][execute]\n"
+                f"Пользователь успешно отменил платёж.\n"
+                f"tg_id={tg_id}, payment_id={payment.id}."
             )
 
             return CancelPaymentResult(success=True)
-
-    async def _audit(self, uow: AbstractUnitOfWork, level: AuditLevel, event: AuditEventType, message: str):
-        await uow.audits.add(
-            AuditLog(
-                level=level,
-                event_type=event,
-                message=message
-            )
-        )

@@ -10,11 +10,11 @@ Async XUI API client.
 Не содержит HTTP-деталей (их обрабатывает XuiHttpClient).
 """
 
-import json, asyncio, logging
+import json, asyncio, httpx, logging
 from uuid import uuid4
 from httpx import Response
 
-from infrastructure.xui.http_client import XuiHttpClient
+from infrastructure.http.http_client import HttpClient
 from infrastructure.xui.exceptions import (
     XuiAuthenticationError,
     XuiInvalidResponseError,
@@ -24,7 +24,7 @@ from infrastructure.xui.exceptions import (
 
 from infrastructure.xui.models import Inbound, Client
 from infrastructure.xui.enums import HttpMethod
-from infrastructure.xui.exceptions import XuiConnectionError, XuiTimeoutError
+from infrastructure.http.exceptions import HttpConnectionError, HttpTimeoutError
 import core.config as config
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class XuiApiClient:
     - преобразование dict → модели
     """
 
-    def __init__(self, http_client: XuiHttpClient, username: str, password: str, host: str) -> None:
+    def __init__(self, http_client: HttpClient, username: str, password: str, host: str) -> None:
         self._http = http_client
         self._username = username
         self._password = password
@@ -71,7 +71,7 @@ class XuiApiClient:
                 # Если сессия умерла - перелогин
                 if response.status_code in (401, 403, 404):
                     await self.login()
-                    response = await self._send(method, url, **kwargs)
+                    response: httpx.Response = await self._send(method, url, **kwargs)
 
                     if response.status_code in (401, 403, 404):
                         raise XuiAuthenticationError("Re-authentication failed")
@@ -89,7 +89,7 @@ class XuiApiClient:
 
                 return data.get("obj")
 
-            except (XuiConnectionError, XuiTimeoutError) as e:
+            except (HttpConnectionError, HttpTimeoutError) as e:
                 logger.warning("Ошибка соединения с XUI: %s. Попытка %d/%d", e, attempt, config.XUI_RETRY_ATTEMPTS)
                 attempt += 1
                 if attempt >= config.XUI_RETRY_ATTEMPTS:

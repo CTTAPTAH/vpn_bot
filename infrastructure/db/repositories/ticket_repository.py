@@ -10,6 +10,8 @@ def to_domain(orm_ticket: ORMTicket) -> DomainTicket:
     return DomainTicket(
         id=orm_ticket.id,
         user_id=orm_ticket.user_id,
+        thread_id=orm_ticket.thread_id,
+        title=orm_ticket.title,
         status=orm_ticket.status,
         created_at=orm_ticket.created_at
     )
@@ -43,10 +45,34 @@ class SQLAlchemyTicketRepository(AbstractTicketRepository):
 
         return to_domain(orm_ticket)
 
+    async def get_by_thread_id(self, thread_id: int) -> DomainTicket | None:
+        stmt = select(ORMTicket).where(ORMTicket.thread_id == thread_id)
+        result = await self._session.execute(stmt)
+        orm_ticket = result.scalar_one_or_none()
+
+        if orm_ticket is None:
+            return None
+
+        return to_domain(orm_ticket)
+
+    async def get_latest(self, user_id: int, limit: int) -> list[DomainTicket]:
+        stmt = (
+            select(ORMTicket).
+            where(ORMTicket.user_id == user_id).
+            order_by(ORMTicket.created_at.desc()).
+            limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        orm_tickets = result.scalars().all()
+
+        return [to_domain(orm_ticket) for orm_ticket in orm_tickets]
+
     # Добавление данных
     async def add(self, ticket: DomainTicket) -> None:
         orm_ticket = ORMTicket(
             user_id=ticket.user_id,
+            thread_id=ticket.thread_id,
+            title=ticket.title,
             status=ticket.status,
             created_at=ticket.created_at
         )
@@ -64,3 +90,4 @@ class SQLAlchemyTicketRepository(AbstractTicketRepository):
             raise ValueError("Ticket not found")
 
         orm_ticket.status = ticket.status
+        orm_ticket.closed_at = ticket.closed_at

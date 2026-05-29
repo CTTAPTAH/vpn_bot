@@ -12,9 +12,6 @@ class PurchasePendingCallback(CallbackData, prefix="purchase_pending"):
     plan_id: int
     key_id: int | None = None
 
-class CancelPaymentCallback(CallbackData, prefix="cancel_payment"):
-    payment_id: int
-
 class PurchaseSuccessCallback(CallbackData, prefix="purchase_success"):
     action: enums.PaymentAction
     payment_id: int

@@ -1,7 +1,8 @@
 """Backend-логика соглашения пользователя с политикой."""
+from application.use_cases.base_use_case import BaseUseCase
 from application.ports.unit_of_work import AbstractUnitOfWork
 
-class AcceptUserAgreementUseCase:
+class AcceptUserAgreementUseCase(BaseUseCase):
     """Сценарий соглашения пользователя с политикой."""
     def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow

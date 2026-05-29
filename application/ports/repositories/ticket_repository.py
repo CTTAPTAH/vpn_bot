@@ -17,6 +17,14 @@ class AbstractTicketRepository(ABC):
         ...
 
     @abstractmethod
+    async def get_by_thread_id(self, thread_id: int) -> Ticket | None:
+        ...
+
+    @abstractmethod
+    async def get_latest(self, user_id: int, limit: int) -> list[Ticket]:
+        ...
+
+    @abstractmethod
     async def add(self, ticket: Ticket) -> None:
         ...
 

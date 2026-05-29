@@ -1,8 +1,8 @@
 """Инициализация БД
 
-Revision ID: 8a29bd7dec65
+Revision ID: affa11fb656e
 Revises: 
-Create Date: 2026-04-03 15:11:27.181446
+Create Date: 2026-05-29 12:18:42.448687
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '8a29bd7dec65'
+revision: str = 'affa11fb656e'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.create_table('audit_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('level', sa.Enum('INFO', 'WARNING', 'ERROR', name='auditlevel', native_enum=False), nullable=False, comment='Уровень лога: INFO, WARNING, ERROR.'),
-    sa.Column('event_type', sa.Enum('PAYMENT_CREATED', 'PAYMENT_FAILED', 'PAYMENT_CANCELLED', 'PAYMENT_COMPLETED', 'PAYMENT_NOT_FOUND', 'PAYMENT_NOT_OWNED_BY_USER', 'ACCESS_GRANTED', 'ACCESS_REVOKED', 'VPN_KEY_CREATED', 'VPN_KEY_UPDATED', 'VPN_KEY_FETCHED', 'VPN_KEY_DELETED', 'TRIAL_ALREADY_GRANTED', 'TRIAL_GRANTED', 'NO_AVAILABLE_SERVERS', 'SERVER_NOT_FOUND', 'KEY_CANCELLED', 'KEY_NOT_FOUND_IN_DB', 'KEY_NOT_FOUND_IN_VPN', 'KEY_NOT_OWNED_BY_USER', 'KEY_LIMIT', 'PLAN_NOT_FOUND', 'PAYING_OTHER', 'ADMIN_ACTION', 'DB_ERROR', 'VPN_ERROR', 'PAYMENT_PROVIDER_ERROR', 'UNEXPECTED_ERROR', 'SYSTEM_ERROR', name='auditeventtype', native_enum=False), nullable=False, comment='Тип бизнес-события (PAYMENT_COMPLETED, ACCESS_GRANTED и т.д.).'),
+    sa.Column('event_type', sa.Enum('PAYMENT_CREATED', 'PAYMENT_FAILED', 'PAYMENT_CANCELLED', 'PAYMENT_COMPLETED', 'PAYMENT_NOT_FOUND', 'PAYMENT_UI_NOT_FOUND', 'PAYMENT_NOT_OWNED_BY_USER', 'EMPTY_PAYMENT_LINK', 'ACCESS_GRANTED', 'ACCESS_REVOKED', 'VPN_KEY_CREATED', 'VPN_KEY_UPDATED', 'VPN_KEY_FETCHED', 'VPN_KEY_DELETED', 'TRIAL_ALREADY_GRANTED', 'TRIAL_GRANTED', 'NO_AVAILABLE_SERVERS', 'SERVER_NOT_FOUND', 'IS_PROCESSING', 'USER_NOT_FOUND', 'MESSAGE_NOT_FOUND', 'TICKET_NOT_FOUND', 'KEY_CANCELLED', 'KEY_NOT_FOUND_IN_DB', 'KEY_NOT_FOUND_IN_VPN', 'KEY_NOT_OWNED_BY_USER', 'KEY_LIMIT', 'PLAN_NOT_FOUND', 'PAYING_OTHER', 'ADMIN_ACTION', 'DB_ERROR', 'VPN_ERROR', 'PAYMENT_PROVIDER_ERROR', 'UNEXPECTED_ERROR', 'SYSTEM_ERROR', name='auditeventtype', native_enum=False), nullable=False, comment='Тип бизнес-события (PAYMENT_COMPLETED, ACCESS_GRANTED и т.д.).'),
     sa.Column('message', sa.String(length=500), nullable=False, comment='Основное сообщение лога.'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Дата и время создания лога.'),
     sa.PrimaryKeyConstraint('id')
@@ -101,12 +101,16 @@ def upgrade() -> None:
     op.create_table('tickets',
     sa.Column('id', sa.Integer(), nullable=False, comment='Уникальный идентификатор обращения в поддержку (PK).'),
     sa.Column('user_id', sa.Integer(), nullable=False, comment='id пользователя, который отправил это обращение.'),
-    sa.Column('status', sa.Enum('OPEN', 'CLOSE', name='ticketstatus', native_enum=False), nullable=False, comment='Статус обращения: открыт, закрыт'),
+    sa.Column('thread_id', sa.Integer(), nullable=False, comment='id топика в группе админов.'),
+    sa.Column('title', sa.Text(), nullable=False, comment='Первые символы первого сообщения. Используется как превью в списке обращений.'),
+    sa.Column('status', sa.Enum('OPEN', 'CLOSED', name='ticketstatus', native_enum=False), nullable=False, comment='Статус обращения: открыт, закрыт'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Время создания обращения.'),
+    sa.Column('closed_at', sa.DateTime(timezone=True), nullable=True, comment='Время закрытия обращения.'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_tickets_created_at'), 'tickets', ['created_at'], unique=False)
+    op.create_index(op.f('ix_tickets_thread_id'), 'tickets', ['thread_id'], unique=True)
     op.create_index(op.f('ix_tickets_user_id'), 'tickets', ['user_id'], unique=False)
     op.create_index('uq_ticket_user_single_open', 'tickets', ['user_id'], unique=True, postgresql_where=sa.text("status = 'OPEN'"))
     op.create_table('messages',
@@ -114,7 +118,6 @@ def upgrade() -> None:
     sa.Column('ticket_id', sa.Integer(), nullable=False, comment='id обращения в поддержку.'),
     sa.Column('sender_type', sa.Enum('SUPPORT', 'USER', name='messagesendertype', native_enum=False), nullable=False, comment='Отправитель сообщения: SUPPORT, USER.'),
     sa.Column('text', sa.Text(), nullable=False, comment='Сообщение отправителя.'),
-    sa.Column('telegram_message_id', sa.Integer(), nullable=False, comment='id сообщения в телеграмм, под которым пришло админу.'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Время создания сообщения.'),
     sa.ForeignKeyConstraint(['ticket_id'], ['tickets.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -128,11 +131,13 @@ def upgrade() -> None:
     sa.Column('plan_id', sa.Integer(), nullable=False, comment='Тариф, за который был произведён платеж.'),
     sa.Column('key_id', sa.Integer(), nullable=True, comment='Связь с подпиской/ключом, который был выдан по этому платежу.'),
     sa.Column('price', sa.Integer(), nullable=False, comment='Сумма платежа.'),
+    sa.Column('payment_method', sa.Integer(), nullable=True, comment='Способ оплаты (enum PaymentMethod)'),
     sa.Column('type', sa.Enum('PURCHASE', 'TRIAL', name='paymenttype', native_enum=False), nullable=False, comment='Тип платежа (покупка, пробный период).'),
     sa.Column('action', sa.Enum('CREATE', 'RENEW', name='paymentaction', native_enum=False), nullable=False, comment='Тип действия над ключом: создание, продление.'),
-    sa.Column('provider', sa.Enum('YOUMONEY', 'INTERNAL', name='paymentprovider', native_enum=False), nullable=False, comment='Платёжный провайдер (например, YooMoney, Qiwi, Telegram).'),
+    sa.Column('provider', sa.Enum('PLATEGA', 'INTERNAL', name='paymentprovider', native_enum=False), nullable=False, comment='Платёжный провайдер (например, YooMoney, Qiwi, Telegram).'),
     sa.Column('provider_payment_id', sa.String(length=255), nullable=False, comment='ID платежа у провайдера.'),
-    sa.Column('status', sa.Enum('PENDING', 'COMPLETED', 'FAILED', 'CANCELLED', 'PROCESSING', name='paymentstatus', native_enum=False), nullable=False, comment='Статус платежа: pending, completed, failed, canceled.'),
+    sa.Column('payment_url', sa.Text(), nullable=True, comment='Ссылка для оплаты'),
+    sa.Column('status', sa.Enum('PENDING', 'CONFIRMED', 'FAILED', 'CANCELLED', 'PROCESSING', name='paymentstatus', native_enum=False), nullable=False, comment='Статус платежа: pending, completed, failed, canceled.'),
     sa.Column('granted_at', sa.DateTime(timezone=True), nullable=True, comment='Время выдачи доступа пользователю. Null, если доступ ещё не выдан.'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Время создания записи платежа.'),
     sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True, comment='Время подтверждённого платежа.'),
@@ -152,12 +157,24 @@ def upgrade() -> None:
     op.create_index(op.f('ix_payments_user_id'), 'payments', ['user_id'], unique=False)
     op.create_index('uq_user_pending_once', 'payments', ['user_id'], unique=True, postgresql_where=sa.text("status = 'PENDING'"))
     op.create_index('uq_user_trial_once', 'payments', ['user_id'], unique=True, postgresql_where=sa.text("type = 'TRIAL'"))
+    op.create_table('payment_ui_state',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('payment_id', sa.Integer(), nullable=False, comment='Ссылка на платеж, для которого сохраняется Telegram UI-сообщение.'),
+    sa.Column('tg_user_id', sa.Integer(), nullable=False, comment='Telegram id пользователя.'),
+    sa.Column('tg_chat_id', sa.Integer(), nullable=False, comment='ID чата пользователя в Telegram, где было отправлено сообщение с оплатой.'),
+    sa.Column('tg_message_id', sa.Integer(), nullable=False, comment='ID сообщения в Telegram, которое должно быть обновлено после изменения статуса платежа.'),
+    sa.ForeignKeyConstraint(['payment_id'], ['payments.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_payment_ui_state_payment_id'), 'payment_ui_state', ['payment_id'], unique=True)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_payment_ui_state_payment_id'), table_name='payment_ui_state')
+    op.drop_table('payment_ui_state')
     op.drop_index('uq_user_trial_once', table_name='payments', postgresql_where=sa.text("type = 'TRIAL'"))
     op.drop_index('uq_user_pending_once', table_name='payments', postgresql_where=sa.text("status = 'PENDING'"))
     op.drop_index(op.f('ix_payments_user_id'), table_name='payments')
@@ -174,6 +191,7 @@ def downgrade() -> None:
     op.drop_table('messages')
     op.drop_index('uq_ticket_user_single_open', table_name='tickets', postgresql_where=sa.text("status = 'OPEN'"))
     op.drop_index(op.f('ix_tickets_user_id'), table_name='tickets')
+    op.drop_index(op.f('ix_tickets_thread_id'), table_name='tickets')
     op.drop_index(op.f('ix_tickets_created_at'), table_name='tickets')
     op.drop_table('tickets')
     op.drop_index(op.f('ix_access_keys_user_id'), table_name='access_keys')

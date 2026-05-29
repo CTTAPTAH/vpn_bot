@@ -6,24 +6,33 @@
 """
 from aiogram import types
 from typing import Callable, Awaitable
+from dataclasses import dataclass
+from domain.enums import PaymentProvider
 
-from app.container import get_vpn_gateway_factory, build_uow
+from app.container import get_vpn_gateway_factory, build_uow, get_platega_client
 from application.use_cases.get_main_menu import GetMainMenuUseCase
 from application.use_cases.get_available_plans import GetAvailablePlansUseCase
 from application.use_cases.create_payment import CreatePaymentUseCase
-from application.use_cases.confirm_payment import ConfirmPaymentUseCase
 from application.use_cases.activate_trial import (ActiveTrialUseCase, ActiveTrialError,
                                                   ActiveTrialSuccess, ActiveTrialChooseKey)
 from application.use_cases.extend_trial import ExtendTrialUseCase
 from application.use_cases.user_keys import GetUserKeysUseCase
 from application.use_cases.selected_key import GetSelectedKeyUseCase
-from application.use_cases.get_key_for_deletion import GetKeyForDeletionUseCase
 from application.services.server_selection import ServerSelectionService
 from presentation.telegram.states.states import Screen
 import presentation.telegram.texts.texts as texts
 import presentation.telegram.keyboards.keyboards as keyboards
 import presentation.telegram.callbacks.callbacks as callbacks
 import domain.enums as enums
+import core.config as config
+
+@dataclass
+class PurchaseSuccessData:
+    """Структура для идентификации конкретного платежа."""
+    provider: PaymentProvider
+    payment_provider_id: str
+    payment_action: enums.PaymentAction
+    vless_link: str
 
 # ===== Главное меню =====
 async def show_main(callback_query: types.CallbackQuery):
@@ -43,13 +52,6 @@ async def show_main(callback_query: types.CallbackQuery):
             reply_markup=keyboards.kb_main(not dto.trial_used)
         )
 
-async def show_view_agreement(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(
-        texts.txt_view_agreement(),
-        reply_markup=keyboards.kb_view_agreement(),
-        disable_web_page_preview=True
-    )
-
 # Тарифы, покупка
 async def show_plans(callback_query: types.CallbackQuery, callback_data: callbacks.PlansCallback):
     use_case = GetAvailablePlansUseCase(build_uow())
@@ -66,62 +68,55 @@ async def show_plans(callback_query: types.CallbackQuery, callback_data: callbac
     )
 
 async def show_purchase_pending(callback_query: types.CallbackQuery, callback_data: callbacks.PurchasePendingCallback):
-    use_case = CreatePaymentUseCase(build_uow())
+    use_case = CreatePaymentUseCase(build_uow(), await get_platega_client())
     result = await use_case.execute(
         tg_id=callback_query.from_user.id,
         username=callback_query.from_user.username,
         payment_action=callback_data.action,
-        provider=enums.PaymentProvider.YOUMONEY, # Заглушка
-        plan_id=callback_data.plan_id
+        currency=config.CURRENCY,
+        provider=enums.PaymentProvider.PLATEGA, # Заглушка
+        plan_id=callback_data.plan_id,
+        payment_method=enums.PaymentMethod.SBPQR,
+        key_id=callback_data.key_id,
+        tg_chat_id=callback_query.message.chat.id,
+        tg_message_id=callback_query.message.message_id
     )
 
     if result.success:
-        if result.is_existing:
-            await callback_query.message.edit_text(
-                texts.txt_existing_payment(result.plan_name, result.price),
-                reply_markup=keyboards.kb_purchase_pending(
-                    payment_link=result.payment_link,
-                    action=callback_data.action,
-                    payment_id=result.payment_id,
-                    key_id=callback_data.key_id
-                )
-            )
-        else:
-            await callback_query.message.edit_text(
-                texts.txt_purchase_pending(result.plan_name, result.price),
-                reply_markup=keyboards.kb_purchase_pending(
-                    payment_link=result.payment_link,
-                    action=callback_data.action,
-                    payment_id=result.payment_id,
-                    key_id=callback_data.key_id
-                )
-            )
+        await callback_query.message.edit_text(
+            texts.txt_purchase_pending(result.plan_name, result.price),
+            reply_markup=keyboards.kb_purchase_pending(payment_link=result.payment_link)
+        )
     else:
         await callback_query.message.edit_text(
             texts.txt_unknown_error(),
             reply_markup=keyboards.kb_error()
         )
 
-async def show_purchase_success(callback_query: types.CallbackQuery, callback_data: callbacks.PurchaseSuccessCallback):
-    use_case = ConfirmPaymentUseCase(build_uow(), get_vpn_gateway_factory(), ServerSelectionService())
-    result = await use_case.execute(
-        tg_id=callback_query.from_user.id,
-        username=callback_query.from_user.username,
-        payment_id=callback_data.payment_id,
-        key_id=callback_data.key_id
-    )
-
-    if result.success:
+async def show_purchase_success(callback_query: types.CallbackQuery, callback_data: PurchaseSuccessData):
+    if callback_data.payment_action is enums.PaymentAction.CREATE:
         await callback_query.message.edit_text(
-            texts.txt_purchase_success(),
+            texts.txt_purchase_success(callback_data.vless_link),
             reply_markup=keyboards.kb_purchase_success()
         )
+
+    elif callback_data.payment_action is enums.PaymentAction.RENEW:
+        await callback_query.message.edit_text(
+            texts.txt_renew_success(callback_data.vless_link),
+            reply_markup=keyboards.kb_purchase_success()
+        )
+
     else:
         await callback_query.message.edit_text(
             texts.txt_unknown_error(),
             reply_markup=keyboards.kb_error()
         )
 
+async def show_purchase_canceled(callback_query: types.CallbackQuery):
+    await callback_query.message.edit_text(
+        texts.txt_payment_cancelled(),
+        reply_markup=keyboards.kb_error()
+    )
 
 # Пробный период
 async def show_trial(callback_query: types.CallbackQuery):
@@ -187,35 +182,6 @@ async def show_selected_key(callback_query: types.CallbackQuery, callback_data: 
             texts.txt_unknown_error(),
             reply_markup=keyboards.kb_error()
         )
-
-async def show_confirm_delete_key(callback_query: types.CallbackQuery,
-                                  callback_data: callbacks.ConfirmDeleteKeyCallback):
-    use_case = GetKeyForDeletionUseCase(build_uow())
-    result = await use_case.execute(callback_data.key_id, callback_query.from_user.id)
-
-    if result.success:
-        await callback_query.message.edit_text(
-            texts.txt_confirm_delete_key(result.key),
-            reply_markup=keyboards.kb_confirm_delete_key(result.key.id)
-        )
-    else:
-        await callback_query.message.edit_text(
-            texts.txt_unknown_error(),
-            reply_markup=keyboards.kb_error()
-        )
-
-# Поддержка
-async def show_help(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_help(), reply_markup=keyboards.kb_help())
-
-async def show_faq(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_faq(), reply_markup=keyboards.kb_faq())
-
-async def show_request_help(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_request_help(), reply_markup=keyboards.kb_request_help())
-
-async def show_my_requests(callback_query: types.CallbackQuery):
-    await callback_query.message.edit_text(texts.txt_my_requests(), reply_markup=keyboards.kb_my_requests())
 
 # ===== Инструкции =====
 async def show_instruction(callback_query: types.CallbackQuery):
@@ -296,7 +262,6 @@ ScreenHandler = Callable[..., Awaitable[None]]
 screens: dict[Screen, ScreenHandler] = {
     # ===== Главное меню =====
     Screen.MAIN: show_main,
-    Screen.VIEW_AGREEMENT: show_view_agreement,
 
     # Тарифы, покупка
     Screen.PLANS: show_plans,
@@ -310,13 +275,6 @@ screens: dict[Screen, ScreenHandler] = {
     # Мои ключи
     Screen.MY_KEYS: show_my_keys,
     Screen.SELECTED_KEY: show_selected_key,
-    Screen.CONFIRM_DELETE_KEY: show_confirm_delete_key,
-
-    # Поддержка
-    Screen.HELP: show_help,
-    Screen.FAQ: show_faq,
-    Screen.REQUEST_HELP: show_request_help,
-    Screen.MY_REQUESTS: show_my_requests,
 
     # ===== Инструкции =====
     Screen.INSTRUCTION: show_instruction,

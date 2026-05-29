@@ -1,6 +1,7 @@
 """Backend-логика для формирования данных о всех тарифах."""
 from dataclasses import dataclass
 
+from application.use_cases.base_use_case import BaseUseCase
 from application.ports.unit_of_work import AbstractUnitOfWork
 from application.common.dto import PlanDTO
 from core.utils import months_from_seconds
@@ -10,7 +11,7 @@ class AvailablePlansDTO:
     plans: list[PlanDTO]
     pending_payment_id: int | None
 
-class GetAvailablePlansUseCase:
+class GetAvailablePlansUseCase(BaseUseCase):
     """Сценарий получения данных о тарифах."""
     def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow

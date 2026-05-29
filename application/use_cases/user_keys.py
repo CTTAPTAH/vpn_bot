@@ -1,6 +1,7 @@
 """Backend-логика для формирования данных для отображения информации о ключах пользователя."""
 from dataclasses import dataclass
 
+from application.use_cases.base_use_case import BaseUseCase
 from application.common.dto import KeyDTO
 from application.ports.unit_of_work import AbstractUnitOfWork
 from core.utils import utcnow
@@ -12,7 +13,7 @@ class UserKeysDTO:
     count_active_keys: int
     keys: list[KeyDTO]
 
-class GetUserKeysUseCase:
+class GetUserKeysUseCase(BaseUseCase):
     """Сценарий получения данных о ключах пользователя."""
     def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow

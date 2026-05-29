@@ -16,7 +16,7 @@ import domain.enums as enums
 # Часто используемы кнопки
 BTN_BACK = InlineKeyboardButton(text="⬅️ Назад", callback_data=Action.BACK)
 BTN_MAIN_MENU = InlineKeyboardButton(text="🏠 Главное меню", callback_data=Action.GO_BACK_TO_MENU)
-BTN_HELP = InlineKeyboardButton(text="💬 Поддержка", callback_data=Screen.HELP)
+BTN_HELP = InlineKeyboardButton(text="💬 Поддержка", url=links.BOT_SUPPORT)
 BTN_MY_KEYS = InlineKeyboardButton(text="🔑 Мои ключи", callback_data=Screen.MY_KEYS)
 
 # Клавиатура для возврата
@@ -52,7 +52,6 @@ def kb_main(has_trial: bool = False) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📱 Настроить защищённое подключение", callback_data=Screen.INSTRUCTION)]
     )
     buttons.append([BTN_HELP])
-    buttons.append([InlineKeyboardButton(text="📄 Оферта / Политика", callback_data=Screen.VIEW_AGREEMENT)])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -90,18 +89,9 @@ def kb_plans(action: enums.PaymentAction, plans: list[PlanDTO],
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def kb_purchase_pending(payment_link: str, action: enums.PaymentAction,
-                        payment_id: int, *, key_id: int | None = None) -> InlineKeyboardMarkup:
+def kb_purchase_pending(payment_link: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Оплатить", url=payment_link)],
-        [InlineKeyboardButton(text="✅ Проверить доступ", callback_data=callbacks.PurchaseSuccessCallback(
-            action=action,
-            payment_id=payment_id,
-            key_id=key_id
-        ).pack())],
-        [InlineKeyboardButton(text="❌ Отменить платёж", callback_data=callbacks.CancelPaymentCallback(
-            payment_id=payment_id
-        ).pack())],
         [BTN_BACK]
     ])
 
@@ -109,6 +99,11 @@ def kb_purchase_success() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="▶️ Продолжить", callback_data=Screen.INSTRUCTION)],
         [BTN_MY_KEYS],
+        [BTN_MAIN_MENU]
+    ])
+
+def kb_purchase_canceled() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
         [BTN_MAIN_MENU]
     ])
 
@@ -171,40 +166,9 @@ def kb_selected_key(key_id: int) -> InlineKeyboardMarkup:
             text="💳 Продлить доступ",
             callback_data=callbacks.PlansCallback(action=enums.PaymentAction.RENEW, key_id=key_id).pack()
         )],
-        [InlineKeyboardButton(
-            text="🗑 Удалить ключ",
-            callback_data=callbacks.ConfirmDeleteKeyCallback(key_id=key_id).pack()
-        )],
         [BTN_HELP],
         [BTN_BACK]
     ])
-
-def kb_confirm_delete_key(key_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="✅ Да, удалить",
-            callback_data=callbacks.DeleteKeyCallback(key_id=key_id).pack()
-        )],
-        [InlineKeyboardButton(text="⬅️ Вернуться к ключу", callback_data=Action.BACK)]
-    ])
-
-# Поддержка
-def kb_help() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Часто задаваемый вопросы", callback_data=Screen.FAQ)],
-        [InlineKeyboardButton(text="Написать запрос", callback_data=Screen.REQUEST_HELP)],
-        [InlineKeyboardButton(text="Мои обращения", callback_data=Screen.MY_REQUESTS)],
-        [BTN_BACK]
-    ])
-
-def kb_faq() -> InlineKeyboardMarkup:
-    return kb_back()
-
-def kb_request_help() -> InlineKeyboardMarkup:
-    return kb_back()
-
-def kb_my_requests() -> InlineKeyboardMarkup:
-    return kb_back()
 
 # ===== Инструкции =====
 def kb_instruction() -> InlineKeyboardMarkup:
@@ -221,7 +185,6 @@ def kb_instruction() -> InlineKeyboardMarkup:
 def kb_apple(vless_link: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Установить приложение", url=links.APPLE_V2RAY_APP)],
-        [InlineKeyboardButton(text="Подключиться", url=links.v2raytun_ios_link(vless_link))],
         [InlineKeyboardButton(text="Возникли проблемы", callback_data=Screen.PROBLEMS_APPLE)],
         [InlineKeyboardButton(text="2-й способ подключения", callback_data=Screen.SECOND_METHOD_APPLE)],
         [BTN_BACK]
@@ -254,7 +217,6 @@ def kb_second_method_apple() -> InlineKeyboardMarkup:
 def kb_android(vless_link: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Установить приложение", url=links.APPLE_V2RAY_APP)],
-        [InlineKeyboardButton(text="Подключиться", url=links.v2raytun_android_link(vless_link))],
         [InlineKeyboardButton(text="Возникли проблемы", callback_data=Screen.PROBLEMS_ANDROID)],
         [InlineKeyboardButton(text="2-й способ подключения", callback_data=Screen.SECOND_METHOD_ANDROID)],
         [BTN_BACK]

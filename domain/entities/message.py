@@ -13,6 +13,5 @@ class Message:
     ticket_id: int
     sender_type: MessageSenderType
     text: str
-    telegram_message_id: int
     id: int | None = None
     created_at: datetime = field(default_factory=utcnow)

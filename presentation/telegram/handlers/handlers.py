@@ -8,9 +8,6 @@ from aiogram import Router, types, F
 from aiogram.filters import Command
 
 from application.use_cases.get_main_menu import GetMainMenuUseCase
-from application.use_cases.create_or_append_user_ticket_message import CreateOrAppendUserTicketMessage
-from application.use_cases.admin_reply_to_ticket import AdminReplyToTicket
-from presentation.telegram.bot import bot
 from presentation.telegram.navigation.navigation import go_to, go_back, go_back_to
 from presentation.telegram.states.states import Screen
 from presentation.telegram.enums import Action
@@ -20,7 +17,7 @@ import presentation.telegram.texts.texts as texts
 import presentation.telegram.keyboards.keyboards as keyboards
 import presentation.telegram.actions.actions as actions
 import app.container as container
-import core.config as config
+from presentation.telegram.bot import bot
 
 def register_handlers():
    """Создаёт и настраивает Router с обработчиками."""
@@ -29,6 +26,7 @@ def register_handlers():
    # Команда start
    @router.message(Command("start"))
    async def cmd_start(message: types.Message):
+      await bot.set_my_description(description="")
       use_case = GetMainMenuUseCase(container.build_uow())
       dto = await use_case.execute(message.from_user.id, message.from_user.username)
 
@@ -44,7 +42,14 @@ def register_handlers():
             texts.txt_main(dto.active_keys),
             reply_markup=keyboards.kb_main(not dto.trial_used)
          )
+         state_manager.reset_state(message.from_user.id)
          state_manager.push_state(message.from_user.id, Screen.MAIN)
+      await message.delete()
+
+   # Команда docs
+   @router.message(Command("docs"))
+   async def cmd_docs(message: types.Message):
+      await message.answer(texts.txt_view_agreement(), disable_web_page_preview=True)
       await message.delete()
 
    # Кнопка назад
@@ -66,10 +71,6 @@ def register_handlers():
       await actions.agreement_with_policy(callback_query)
       await go_to(callback_query, Screen.MAIN)
 
-   @router.callback_query(F.data == Screen.VIEW_AGREEMENT)
-   async def process_view_agreement(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.VIEW_AGREEMENT)
-
    # Тарифы, покупка
    @router.callback_query(callbacks.PlansCallback.filter())
    async def process_plans(callback_query: types.CallbackQuery, callback_data: callbacks.PlansCallback):
@@ -79,12 +80,6 @@ def register_handlers():
    async def process_purchase_pending(callback_query: types.CallbackQuery,
                                       callback_data: callbacks.PurchasePendingCallback):
       await go_to(callback_query, Screen.PURCHASE_PENDING, data=callback_data)
-
-   @router.callback_query(callbacks.CancelPaymentCallback.filter())
-   async def process_cancel_payment(callback_query: types.CallbackQuery,
-                                    callback_data: callbacks.CancelPaymentCallback):
-      answer = await actions.cancel_payment(callback_query, callback_data)
-      await go_back_to(callback_query, Screen.PLANS, answer=answer)
 
    @router.callback_query(callbacks.PurchaseSuccessCallback.filter())
    async def process_purchase_success(callback_query: types.CallbackQuery,
@@ -109,67 +104,10 @@ def register_handlers():
    async def process_selected_key(callback_query: types.CallbackQuery, callback_data: callbacks.SelectedKeyCallback):
       await go_to(callback_query, Screen.SELECTED_KEY, data=callback_data)
 
-   @router.callback_query(callbacks.ConfirmDeleteKeyCallback.filter())
-   async def process_confirm_delete_key(callback_query: types.CallbackQuery,
-                                        callback_data: callbacks.ConfirmDeleteKeyCallback):
-      await go_to(callback_query, Screen.CONFIRM_DELETE_KEY, data=callback_data)
-
    @router.callback_query(callbacks.DeleteKeyCallback.filter())
    async def process_key_deleted(callback_query: types.CallbackQuery, callback_data: callbacks.DeleteKeyCallback):
       answer = await actions.delete_key(callback_query, callback_data)
       await go_back_to(callback_query, Screen.MY_KEYS, answer=answer)
-
-   # Поддержка
-   @router.callback_query(F.data == Screen.HELP)
-   async def process_help(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.HELP)
-
-   @router.callback_query(F.data == Screen.FAQ)
-   async def process_faq(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.FAQ)
-
-   @router.callback_query(F.data == Screen.REQUEST_HELP)
-   async def process_request_help(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.REQUEST_HELP)
-
-   @router.callback_query(F.data == Screen.MY_REQUESTS)
-   async def process_my_requests(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.MY_REQUESTS)
-
-   @router.message()
-   async def handle_messages(message: types.Message):
-      user_id = message.from_user.id
-      state = state_manager.get_state(user_id)
-
-      if state is None or state.screen != Screen.REQUEST_HELP:
-         if message.from_user.id != config.ADMIN_ID:
-            return
-
-         if not message.reply_to_message:
-            return
-
-         reply_to_message_id = message.reply_to_message.message_id
-
-         use_case = AdminReplyToTicket(container.build_uow())
-         user_id = await use_case.execute(reply_to_message_id, message.text)
-         await bot.send_message(
-            chat_id=user_id,
-            text=f"Ответ поддержки.\n{message.text}"
-         )
-         return
-
-      if not message.text:
-         await message.answer("Поддерживаются только текстовые сообщения")
-         return
-
-      await message.answer("Сообщение отправлено! Ожидайте ответа.")
-      admin_msg = await bot.send_message(
-         chat_id=config.ADMIN_ID,
-         text=message.text
-      )
-
-      use_case = CreateOrAppendUserTicketMessage(container.build_uow())
-      await use_case.execute(user_id, message.from_user.username, message.text, admin_msg.message_id)
 
    # ===== Инструкции =====
    @router.callback_query(F.data == Screen.INSTRUCTION)

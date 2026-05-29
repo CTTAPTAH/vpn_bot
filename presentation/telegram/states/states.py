@@ -17,12 +17,12 @@ class Screen(StrEnum):
 
     # ===== Главное меню =====
     MAIN = "main"
-    VIEW_AGREEMENT = "view_agreement"
 
     # Тарифы, покупка
     PLANS = "plans"
     PURCHASE_PENDING = "purchase_pending"
     PURCHASE_SUCCESS = "purchase_success"
+    PURCHASE_CANCELED = "purchase_canceled"
 
     # Пробный период
     TRIAL = "trial"
@@ -31,13 +31,6 @@ class Screen(StrEnum):
     # Мои ключи
     MY_KEYS = "my_keys"
     SELECTED_KEY = "selected_key"
-    CONFIRM_DELETE_KEY = "confirm_delete_key"
-
-    # Поддержка
-    HELP = "help"
-    FAQ = "faq"
-    REQUEST_HELP = "request_help"
-    MY_REQUESTS = "my_requests"
     
     # ===== Инструкции =====
     INSTRUCTION = "instruction"

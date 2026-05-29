@@ -2,9 +2,9 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from application.use_cases.base_use_case import BaseUseCase
 from application.common.dto import KeyDTO
 from application.ports.unit_of_work import AbstractUnitOfWork
-from domain.entities.audit_log import AuditLog
 from domain.enums import AuditLevel, AuditEventType
 from core.utils import utcnow
 
@@ -19,7 +19,7 @@ class GetKeyForDeletionResult:
     key: KeyDTO | None = None
     error_type: GetKeyForDeletionErrorType | None = None
 
-class GetKeyForDeletionUseCase:
+class GetKeyForDeletionUseCase(BaseUseCase):
     """Сценарий получения данных о ключе, который хочет удалить пользователь."""
     def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow
@@ -32,16 +32,13 @@ class GetKeyForDeletionUseCase:
         async with self._uow as uow:
             key = await uow.keys.get_view_by_id(key_id)
             if key is None:
-                await uow.audits.add(
-                    AuditLog(
-                        level=AuditLevel.ERROR,
-                        event_type=AuditEventType.KEY_NOT_FOUND_IN_DB,
-                        message=(
-                            f"Не удалось выдать информацию о ключе.\n"
-                            f"Ключ не найден в базе данных.\n"
-                            f"(key_id={key_id}, tg_id={tg_id})."
-                        )
-                    )
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.KEY_NOT_FOUND_IN_DB,
+                    f"[GetKeyForDeletionUseCase][execute]\n"
+                    f"Ключ не найден в базе данных.\n"
+                    f"key_id={key_id}, tg_id={tg_id}."
                 )
                 return GetKeyForDeletionResult(success=False, error_type=GetKeyForDeletionErrorType.NOT_FOUND_IN_DB)
 

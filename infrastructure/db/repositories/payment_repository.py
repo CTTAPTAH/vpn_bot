@@ -1,10 +1,10 @@
 from sqlalchemy import select, exists, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domain.entities.payment import Payment as DomainPayment, Payment
+from domain.entities.payment import Payment as DomainPayment
 from application.ports.repositories.payment_repository import AbstractPaymentRepository
 from infrastructure.db.models.payment import Payment as ORMPayment
-from domain.enums import PaymentProvider, PaymentType, PaymentStatus
+from domain.enums import PaymentProvider, PaymentType, PaymentStatus, PaymentMethod
 
 def to_domain(orm_payment: ORMPayment) -> DomainPayment:
     return DomainPayment(
@@ -13,10 +13,12 @@ def to_domain(orm_payment: ORMPayment) -> DomainPayment:
         plan_id=orm_payment.plan_id,
         key_id=orm_payment.key_id,
         price=orm_payment.price,
+        payment_method=PaymentMethod(orm_payment.payment_method),
         type=orm_payment.type,
         action=orm_payment.action,
         provider=orm_payment.provider,
         provider_payment_id=orm_payment.provider_payment_id,
+        payment_url=orm_payment.payment_url,
         status=orm_payment.status,
         granted_at=orm_payment.granted_at,
         created_at=orm_payment.created_at,
@@ -39,7 +41,7 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
 
         return to_domain(orm_payment)
 
-    async def get_for_update(self, payment_id: int) -> Payment | None:
+    async def get_for_update(self, payment_id: int) -> DomainPayment | None:
         """Получить платёж по id и блокировать строку для идемпотентности."""
         stmt = (select(ORMPayment)
                 .where(ORMPayment.id == payment_id)
@@ -53,15 +55,19 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
 
         return to_domain(orm_payment)
 
-    async def get_by_provider_and_payment_id(
+    async def get_by_provider_and_payment_id_for_update(
             self,
             provider: PaymentProvider,
             provider_payment_id: str
     ) -> DomainPayment | None:
         """Получить платёж по его id у провайдера."""
-        stmt = select(ORMPayment).where(
-            ORMPayment.provider == provider,
-            ORMPayment.provider_payment_id == provider_payment_id
+        stmt = (
+            select(ORMPayment)
+            .where(
+                ORMPayment.provider == provider,
+                ORMPayment.provider_payment_id == provider_payment_id
+            )
+            .with_for_update()
         )
         result = await self._session.execute(stmt)
         orm_payment = result.scalar_one_or_none()
@@ -71,24 +77,7 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
 
         return to_domain(orm_payment)
 
-    async def get_user_pending_payment(self, user_id: int) -> Payment | None:
-        """Возвращает незавершённый платёж пользователя и блокирует его строку для идемпотентности."""
-        stmt = (
-            select(ORMPayment)
-            .where(
-                ORMPayment.status == PaymentStatus.PENDING,
-                ORMPayment.user_id == user_id
-            )
-        )
-        result = await self._session.execute(stmt)
-        orm_payment = result.scalars().first()
-
-        if orm_payment is None:
-            return None
-
-        return to_domain(orm_payment)
-
-    async def get_user_pending_payment_for_update(self, user_id: int) -> Payment | None:
+    async def get_user_pending_payment_for_update(self, user_id: int) -> DomainPayment | None:
         """Возвращает незавершённый платёж пользователя и блокирует его строку для идемпотентности."""
         stmt = (
             select(ORMPayment)
@@ -143,14 +132,16 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
             plan_id=payment.plan_id,
             key_id=payment.key_id,
             price=payment.price,
+            payment_method=int(payment.payment_method),
             type=payment.type,
             action=payment.action,
             provider=payment.provider,
             provider_payment_id=payment.provider_payment_id,
+            payment_url=payment.payment_url,
             status=payment.status,
             granted_at=payment.granted_at,
             created_at=payment.created_at,
-            paid_at=payment.paid_at,
+            paid_at=payment.paid_at
         )
         self._session.add(orm_payment)
         await self._session.flush()
@@ -166,5 +157,6 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
 
         orm_payment.key_id = payment.key_id
         orm_payment.status = payment.status
+        orm_payment.payment_method = int(payment.payment_method)
         orm_payment.granted_at = payment.granted_at
         orm_payment.paid_at = payment.paid_at

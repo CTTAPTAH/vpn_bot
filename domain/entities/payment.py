@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from core.utils import utcnow
-from domain.enums import PaymentStatus, PaymentType, PaymentProvider, PaymentAction
+from domain.enums import PaymentStatus, PaymentType, PaymentProvider, PaymentAction, PaymentMethod
 
 @dataclass
 class Payment:
@@ -21,5 +21,7 @@ class Payment:
     created_at: datetime = field(default_factory=utcnow)
     id: int | None = None
     key_id: int | None = None
+    payment_method: PaymentMethod | None = None
+    payment_url: str | None = None
     granted_at: datetime | None = None
     paid_at: datetime | None = None

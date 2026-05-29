@@ -3,12 +3,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from datetime import datetime, timedelta
 
+from application.use_cases.base_use_case import BaseUseCase
 from application.ports.unit_of_work import AbstractUnitOfWork
 from application.ports.vpn.gateway_factory import AbstractVpnGatewayFactory
 from application.errors.vpn_errors import VpnGatewayError, VpnKeyNotFoundError
-from domain.entities.audit_log import AuditLog
 from domain.entities.access_key import AccessKey
 from domain.entities.payment import Payment
+from domain.entities.server import Server
 from domain.enums import AuditLevel, AuditEventType, PaymentType, PaymentAction, PaymentProvider, PaymentStatus
 import core.utils as utils
 
@@ -26,9 +27,8 @@ class ExtendTrialResult:
     plan_name: str | None = None
     num_days: int | None = None
 
-class ExtendTrialUseCase:
+class ExtendTrialUseCase(BaseUseCase):
     """Сценарий выдачи/возврата результата пробного периода."""
-
     def __init__(self, uow: AbstractUnitOfWork, gateway_factory: AbstractVpnGatewayFactory):
         self._uow = uow
         self._gateway_factory = gateway_factory
@@ -44,7 +44,9 @@ class ExtendTrialUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.KEY_NOT_FOUND_IN_DB,
-                    f"Не удалось продлить пробным периодом. ключ не найден. tg_id={tg_id}, key_id={key_id}"
+                    f"[ExtendTrialUseCase][execute]\n"
+                    f"Не удалось продлить пробным периодом. ключ не найден.\n"
+                    f"tg_id={tg_id}, key_id={key_id}."
                 )
                 return ExtendTrialResult(False, ExtendTrialErrorType.KEY_NOT_FOUND)
 
@@ -53,9 +55,22 @@ class ExtendTrialUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.KEY_NOT_OWNED_BY_USER,
-                    f"Не удалось продлить пробным периодом. чужой ключ. user_id={user.id}, key_id={key.id}"
+                    f"[ExtendTrialUseCase][execute]\n"
+                    f"Не удалось продлить пробным периодом. чужой ключ.\n"
+                    f"tg_id={tg_id}, key_id={key.id}."
                 )
                 return ExtendTrialResult(False, ExtendTrialErrorType.KEY_NOT_OWNED)
+
+            server = await uow.servers.get_by_id(key.server_id)
+            if server is None:
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.SERVER_NOT_FOUND,
+                    f"[ExtendTrialUseCase][_sync_vpn]\n"
+                    f"Сервер не найден в БД.\n"
+                    f"server_id={key.server_id}, tg_id={tg_id}."
+                )
 
             plan = await uow.plans.get_trial()
             if plan is None:
@@ -63,7 +78,9 @@ class ExtendTrialUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.PLAN_NOT_FOUND,
-                    f"Пробный период не найден. user_id={user.id}"
+                    f"[ExtendTrialUseCase][execute]\n"
+                    f"Пробный период не найден.\n"
+                    f"tg_id={tg_id}."
                 )
                 return ExtendTrialResult(False, ExtendTrialErrorType.TRIAL_PLAN_NOT_FOUND)
 
@@ -76,7 +93,9 @@ class ExtendTrialUseCase:
                     uow,
                     AuditLevel.INFO,
                     AuditEventType.TRIAL_ALREADY_GRANTED,
-                    f"Пробный период уже был выдан. user_id={user.id}"
+                    f"[ExtendTrialUseCase][execute]\n"
+                    f"Пробный период уже был выдан.\n"
+                    f"tg_id={tg_id}."
                 )
                 return ExtendTrialResult(True, None, plan.name, trial_days)
 
@@ -91,7 +110,7 @@ class ExtendTrialUseCase:
                 plan.price
             )
 
-        vpn_ok = await self._sync_vpn(uow, key.id, key.server_id, expiry_time, tg_id)
+        vpn_ok = await self._sync_vpn(uow, key.id, server, expiry_time, tg_id)
         if not vpn_ok:
             return ExtendTrialResult(False, ExtendTrialErrorType.VPN_SYNC_FAILED)
 
@@ -99,19 +118,12 @@ class ExtendTrialUseCase:
             uow,
             AuditLevel.INFO,
             AuditEventType.TRIAL_GRANTED,
-            f"Пробный доступ выдан. user_id={user.id}, key_id={key.id}, payment_id={payment.id}",
+            f"[ExtendTrialUseCase][execute]\n"
+            f"Пробный доступ выдан.\n"
+            f"user_id={user.id}, key_id={key.id}, payment_id={payment.id}."
         )
 
         return ExtendTrialResult(True, None, plan.name, trial_days)
-
-    async def _audit(self, uow: AbstractUnitOfWork, level: AuditLevel, event: AuditEventType, message: str) -> None:
-        await uow.audits.add(
-            AuditLog(
-                level=level,
-                event_type=event,
-                message=message,
-            )
-        )
 
     def _calculate_new_expiry(self, key: AccessKey, duration_seconds: int) -> datetime:
         now = utils.utcnow()
@@ -135,7 +147,7 @@ class ExtendTrialUseCase:
             action=PaymentAction.RENEW,
             provider=PaymentProvider.INTERNAL,
             provider_payment_id=utils.new_uuid(),
-            status=PaymentStatus.COMPLETED,
+            status=PaymentStatus.CONFIRMED,
             key_id=key_id,
             created_at=now,
             granted_at=now,
@@ -145,23 +157,9 @@ class ExtendTrialUseCase:
         await uow.payments.add(payment)
         return payment
 
-    async def _sync_vpn(self, uow: AbstractUnitOfWork, key_id: int, server_id: int,
+    async def _sync_vpn(self, uow: AbstractUnitOfWork, key_id: int, server: Server,
                         expiry_time: datetime, tg_id: int) -> bool:
         try:
-            async with self._uow as uow:
-                server = await uow.servers.get_by_id(server_id)
-                if server is None:
-                    await uow.audits.add(
-                        AuditLog(
-                            level=AuditLevel.ERROR,
-                            event_type=AuditEventType.SERVER_NOT_FOUND,
-                            message=(
-                                f"Во время удаления ключа не удалось найти сервер в БД. "
-                                f"server_id={server_id}, tg_id={tg_id}"
-                            )
-                        )
-                    )
-                    return False
             vpn = await self._gateway_factory.get_gateway(server)
             vpn_email = str(key_id)
             await vpn.update_expiry(vpn_email, expiry_time)
@@ -172,7 +170,9 @@ class ExtendTrialUseCase:
                 uow,
                 AuditLevel.ERROR,
                 AuditEventType.KEY_NOT_FOUND_IN_VPN,
-                f"Синхронизация пробного периода с vpn не удалась. Ключ не найден. key_id={key_id}"
+                f"[ExtendTrialUseCase][_sync_vpn]\n"
+                f"Ключ не найден."
+                f"tg_id={tg_id}, key_id={key_id}."
             )
             return False
 
@@ -181,6 +181,9 @@ class ExtendTrialUseCase:
                 uow,
                 AuditLevel.ERROR,
                 AuditEventType.VPN_ERROR,
-                f"Ошибка синхронизации при выдачи пробного периода. key_id={key_id}, error={e}",
+                f"[ExtendTrialUseCase][_sync_vpn]\n"
+                f"Неизвестная ошибка синхронизации БД с vpn при выдачи пробного периода.\n"
+                f"key_id={key_id}.\n"
+                f"error={e}"
             )
             return False

@@ -9,17 +9,16 @@ Async HTTP client for XUI integration.
 
 Не содержит бизнес-логики XUI.
 """
-
 from typing import Any
 
 import httpx
 
-from infrastructure.xui.exceptions import (
-    XuiConnectionError,
-    XuiTimeoutError,
+from infrastructure.http.exceptions import (
+    HttpConnectionError,
+    HttpTimeoutError,
 )
 
-class XuiHttpClient:
+class HttpClient:
     """
     Низкоуровневый HTTP-клиент для работы с XUI API.
 
@@ -33,7 +32,12 @@ class XuiHttpClient:
     async def start(self):
         """Инициализация клиента."""
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self._base_url, timeout=self._timeout, verify=False)
+            self._client = httpx.AsyncClient(
+                base_url=self._base_url,
+                timeout=self._timeout,
+                verify=False,
+                trust_env=False
+            )
 
     async def close(self):
         """Закрытие клиента."""
@@ -48,15 +52,16 @@ class XuiHttpClient:
         return self._client
 
     # Публичные методы
-    async def get(self, url: str, *, params: dict[str, Any] | None = None) -> httpx.Response:
+    async def get(self, url: str, *, params: dict[str, Any] | None = None,
+                  headers: dict[str, Any] | None = None) -> httpx.Response:
         client = self._ensure_client()
 
         try:
-            response = await client.get(url, params=params)
+            response = await client.get(url, params=params, headers=headers)
         except httpx.TimeoutException as exc:
-            raise XuiTimeoutError("Request timeout") from exc
+            raise HttpTimeoutError("Request timeout") from exc
         except httpx.ConnectError as exc:
-            raise XuiConnectionError("Connection failed") from exc
+            raise HttpConnectionError("Connection failed") from exc
 
         return response
 
@@ -65,15 +70,16 @@ class XuiHttpClient:
             url: str,
             *,
             json: dict[str, Any] | None = None,
-            data: dict[str, Any] | None = None
+            data: dict[str, Any] | None = None,
+            headers: dict[str, Any] | None = None
     ) -> httpx.Response:
         client = self._ensure_client()
 
         try:
-            response = await client.post(url, json=json, data=data)
+            response = await client.post(url, json=json, data=data, headers=headers)
         except httpx.TimeoutException as exc:
-            raise XuiTimeoutError("Request timeout") from exc
+            raise HttpTimeoutError("Request timeout") from exc
         except httpx.ConnectError as exc:
-            raise XuiConnectionError("Connection failed") from exc
+            raise HttpConnectionError("Connection failed") from exc
 
         return response

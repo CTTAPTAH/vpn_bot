@@ -12,10 +12,8 @@ def to_domain(orm_message: ORMMessage) -> DomainMessage:
         ticket_id=orm_message.ticket_id,
         sender_type=orm_message.sender_type,
         text=orm_message.text,
-        telegram_message_id=orm_message.telegram_message_id,
         created_at=orm_message.created_at
     )
-
 
 class SQLAlchemyMessageRepository(AbstractMessageRepository):
     """Реализация репозитория сообщения в поддержку на основе SQLAlchemy."""
@@ -33,15 +31,17 @@ class SQLAlchemyMessageRepository(AbstractMessageRepository):
 
         return to_domain(orm_message)
 
-    async def get_by_telegram_message_id(self, telegram_message_id) -> DomainMessage | None:
-        stmt = select(ORMMessage).where(ORMMessage.telegram_message_id == telegram_message_id)
+    async def get_all_by_ticket_id(self, ticket_id, limit: int) -> list[DomainMessage]:
+        stmt = (
+            select(ORMMessage)
+            .where(ORMMessage.ticket_id == ticket_id)
+            .order_by(ORMMessage.created_at.desc())
+            .limit(limit)
+        )
         result = await self._session.execute(stmt)
-        orm_message = result.scalar_one_or_none()
+        orm_messages = result.scalars().all()
 
-        if orm_message is None:
-            return None
-
-        return to_domain(orm_message)
+        return [to_domain(message) for message in orm_messages]
 
     # Добавление данных
     async def add(self, message: DomainMessage) -> None:
@@ -49,7 +49,6 @@ class SQLAlchemyMessageRepository(AbstractMessageRepository):
             ticket_id=message.ticket_id,
             sender_type=message.sender_type,
             text=message.text,
-            telegram_message_id=message.telegram_message_id,
             created_at=message.created_at
         )
         self._session.add(orm_message)

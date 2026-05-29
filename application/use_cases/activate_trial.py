@@ -4,6 +4,7 @@ from enum import StrEnum
 from uuid import uuid4
 from datetime import datetime
 
+from application.use_cases.base_use_case import BaseUseCase
 from application.ports.unit_of_work import AbstractUnitOfWork
 from application.ports.vpn.gateway_factory import AbstractVpnGatewayFactory
 from application.common.dto import KeyDTO
@@ -17,6 +18,7 @@ from domain.entities.access_key import AccessKey
 from domain.entities.user import User
 from domain.entities.plan import Plan
 from domain.entities.payment import Payment
+from domain.entities.server import Server
 from domain.enums import AuditLevel, AuditEventType, PaymentType, PaymentAction, PaymentProvider, PaymentStatus
 import core.utils as utils
 
@@ -55,7 +57,7 @@ class ActiveTrialChooseKey(ActiveTrialResult):
     count_keys: int
     keys: list[KeyDTO]
 
-class ActiveTrialUseCase:
+class ActiveTrialUseCase(BaseUseCase):
     """Сценарий выдачи пробного периода."""
     def __init__(self, uow: AbstractUnitOfWork, gateway_factory: AbstractVpnGatewayFactory,
                  selector: ServerSelectionService):
@@ -82,7 +84,7 @@ class ActiveTrialUseCase:
         key_id: int
         key_name: str
         payment_id: int
-        server_id: int
+        server: Server
         need_create_vpn: bool
         is_processing: bool
 
@@ -98,7 +100,7 @@ class ActiveTrialUseCase:
             expiry_time = utils.add_seconds_to_now(plan.duration_seconds)
             trial_days = utils.days_from_seconds(plan.duration_seconds)
 
-            # Если пробного период у пользователя не было, то выдаём доступ
+            # Если пробного периода у пользователя не было, то выдаём доступ
             prepare = await self._prepare(uow, payment, user, plan, expiry_time, now, tg_id)
 
             if isinstance(prepare, self._PrepareError):
@@ -110,7 +112,7 @@ class ActiveTrialUseCase:
         if isinstance(prepare, self._PrepareReady):
             # Если статус платежа PROCESSING, то выходим
             if prepare.is_processing:
-                vless_link = await self._get_vless_link_or_error(prepare.key_id, prepare.server_id,
+                vless_link = await self._get_vless_link_or_error(prepare.key_id, prepare.server,
                                                                  prepare.key_name, tg_id)
                 return ActiveTrialSuccess(num_days=trial_days, vless_link=vless_link)
 
@@ -118,7 +120,7 @@ class ActiveTrialUseCase:
             error = await self._sync_with_vpn(
                 prepare.key_id,
                 prepare.payment_id,
-                prepare.server_id,
+                prepare.server,
                 expiry_time, tg_id,
                 prepare.need_create_vpn
             )
@@ -126,7 +128,7 @@ class ActiveTrialUseCase:
                 return ActiveTrialError(error_type=error)
 
             # Получаем vless ссылку
-            link_or_error = await self._get_vless_link_or_error(prepare.key_id, prepare.server_id,
+            link_or_error = await self._get_vless_link_or_error(prepare.key_id, prepare.server,
                                                                 prepare.key_name, tg_id)
             if isinstance(link_or_error, ActiveTrialErrorType):
                 return ActiveTrialError(link_or_error)
@@ -159,6 +161,14 @@ class ActiveTrialUseCase:
                     )
                     for v in views
                 ]
+                await self._audit(
+                    uow,
+                    AuditLevel.WARNING,
+                    AuditEventType.KEY_LIMIT,
+                    f"[ActiveTrialUseCase][_prepare]\n"
+                    f"Превышен лимит по ключам.\n"
+                    f"tg_id={tg_id}."
+                )
                 return self._PrepareChooseKey(
                     count_keys=count_all_keys,
                     keys=keys_dto
@@ -173,23 +183,24 @@ class ActiveTrialUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.NO_AVAILABLE_SERVERS,
-                    f"Во время выдачи доступа после получения пробного доступа не удалось найти сервер, "
-                    f"на котором будет находится ключ. server_ids={server_ids}, tg_id={user.tg_id}"
+                    f"[ActiveTrialUseCase][_prepare]\n"
+                    f"Не удалось найти сервер, на котором будет располагаться ключ.\n"
+                    f"tg_id={user.tg_id}, server_ids={server_ids}."
                 )
                 return self._PrepareError(error=ActiveTrialErrorType.NO_AVAILABLE_SERVERS)
-            async with self._uow as uow:
-                server = await uow.servers.get_by_id(server_id)
 
-                if server is None:
-                    await self._audit(
-                        uow,
-                        AuditLevel.ERROR,
-                        AuditEventType.SERVER_NOT_FOUND,
-                        f"Во время выдачи доступа после получения пробного доступа "
-                        f"не удалось найти сервер в БД. "
-                        f"server_id={server_id}, tg_id={tg_id}"
-                    )
-                    return self._PrepareError(error=ActiveTrialErrorType.SERVER_NOT_FOUND)
+            server = await uow.servers.get_by_id(server_id)
+
+            if server is None:
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.SERVER_NOT_FOUND,
+                    f"[ActiveTrialUseCase][_prepare]\n"
+                    f"Сервер не найден.\n"
+                    f"tg_id={tg_id}, server_id={server_id}."
+                )
+                return self._PrepareError(error=ActiveTrialErrorType.SERVER_NOT_FOUND)
             key = await self._create_trial_key(uow, user, plan, server_id, now, expiry_time)
             payment = await self._create_trial_payment(uow, user, plan, key, now)
 
@@ -198,6 +209,7 @@ class ActiveTrialUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.PAYMENT_NOT_FOUND,
+                    f"[ActiveTrialUseCase][_prepare]\n"
                     f"Платёж имеет user_id, который не соответствует пользователю. "
                     f"tg_id={tg_id}, payment_id={payment.id}."
                 )
@@ -209,36 +221,31 @@ class ActiveTrialUseCase:
             if payment.status == PaymentStatus.PROCESSING:
                 is_processing = True
             key = await uow.keys.get_by_id(payment.key_id)
-            server_id = key.server_id
+            server = await uow.servers.get_by_id(key.server_id)
+            if server is None:
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.SERVER_NOT_FOUND,
+                    f"[ActiveTrialUseCase][_prepare]\n"
+                    f"Сервер не найден.\n"
+                    f"tg_id={tg_id}, server_id={key.server_id}."
+                )
+                return self._PrepareError(error=ActiveTrialErrorType.SERVER_NOT_FOUND)
 
         return self._PrepareReady(
             key_id=key.id,
             key_name=server.default_key_name,
             payment_id=payment.id,
-            server_id=server_id,
+            server=server,
             need_create_vpn=need_create_vpn,
             is_processing=is_processing
         )
 
-    async def _sync_with_vpn(self, key_id: int, payment_id: int, server_id: int, expiry_time: datetime,
+    async def _sync_with_vpn(self, key_id: int, payment_id: int, server: Server, expiry_time: datetime,
                           tg_id: int, need_create_vpn: bool) -> ActiveTrialErrorType | None:
         try:
             if need_create_vpn:
-                # Получаем сервер
-                async with self._uow as uow:
-                    server = await uow.servers.get_by_id(server_id)
-
-                    if server is None:
-                        await self._audit(
-                            uow,
-                            AuditLevel.ERROR,
-                            AuditEventType.SERVER_NOT_FOUND,
-                            f"Во время выдачи доступа после получения пробного доступа "
-                            f"не удалось найти сервер в БД. "
-                            f"server_id={server_id}, tg_id={tg_id}"
-                        )
-                        return ActiveTrialErrorType.SERVER_NOT_FOUND
-
                 vpn = await self._gateway_factory.get_gateway(server)
                 vpn_email = str(key_id)
                 await vpn.create_key(vpn_email, expiry_time)
@@ -250,8 +257,9 @@ class ActiveTrialUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.VPN_KEY_CREATED,
-                    f"Ключ уже существует в XUI. "
-                    f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}"
+                    f"[ActiveTrialUseCase][_sync_with_vpn]\n"
+                    f"Ключ уже существует в XUI.\n"
+                    f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}."
                 )
             return ActiveTrialErrorType.KEY_ALREADY_EXISTS
 
@@ -259,32 +267,19 @@ class ActiveTrialUseCase:
             async with self._uow as uow:
                 await uow.audits.add(
                     AuditLog(
-                        level=AuditLevel.ERROR,
-                        event_type=AuditEventType.VPN_ERROR,
-                        message=f"Ошибка создания ключа в XUI. "
-                                f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}, Ошибка: {e}"
+                        AuditLevel.ERROR,
+                        AuditEventType.VPN_ERROR,
+                        f"[ActiveTrialUseCase][_sync_with_vpn]\n"
+                        f"Неизвестная ошибка при создании vpn ключа.\n"
+                        f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}.\n"
+                        f"Ошибка: {e}"
                     )
                 )
                 return ActiveTrialErrorType.UNKNOWN_ERROR
 
-    async def _get_vless_link_or_error(self, key_id: int, server_id: int,
+    async def _get_vless_link_or_error(self, key_id: int, server: Server,
                                        key_name: str, tg_id: int) -> str | ActiveTrialErrorType:
         try:
-            # Получаем сервер
-            async with self._uow as uow:
-                server = await uow.servers.get_by_id(server_id)
-
-                if server is None:
-                    await self._audit(
-                        uow,
-                        AuditLevel.ERROR,
-                        AuditEventType.SERVER_NOT_FOUND,
-                        f"Во время выдачи доступа после получения пробного доступа "
-                        f"не удалось найти сервер в БД. "
-                        f"server_id={server_id}, tg_id={tg_id}"
-                    )
-                    return ActiveTrialErrorType.SERVER_NOT_FOUND
-
             vpn = await self._gateway_factory.get_gateway(server)
             vless_link = await vpn.get_link(str(key_id), key_name)
             return vless_link
@@ -295,20 +290,21 @@ class ActiveTrialUseCase:
                     uow,
                     AuditLevel.ERROR,
                     AuditEventType.KEY_NOT_FOUND_IN_VPN,
-                    f"Не удалось получить ссылку ключа пробного периода. Ключ не найден. "
-                    f"tg_id={tg_id}, key_id={key_id}"
+                    f"[ActiveTrialUseCase][_get_vless_link_or_error]\n"
+                    f"Ключ не найден.\n"
+                    f"tg_id={tg_id}, key_id={key_id}."
                 )
             return ActiveTrialErrorType.KEY_NOT_FOUND
 
         except VpnGatewayError as e:
             async with self._uow as uow:
-                await uow.audits.add(
-                    AuditLog(
-                        level=AuditLevel.ERROR,
-                        event_type=AuditEventType.VPN_ERROR,
-                        message=f"Не удалось получить ссылку ключа пробного периода. "
-                                f"tg_id={tg_id}, key_id={key_id}, Ошибка: {e}"
-                    )
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.VPN_ERROR,
+                    f"[ActiveTrialUseCase][_get_vless_link_or_error]\n"
+                    f"Не удалось получить ссылку на ключ.\n"
+                    f"tg_id={tg_id}, key_id={key_id}, Ошибка: {e}"
                 )
             return ActiveTrialErrorType.UNKNOWN_ERROR
 
@@ -323,7 +319,7 @@ class ActiveTrialUseCase:
             await uow.keys.update(key)
 
             payment = await uow.payments.get_for_update(payment_id)
-            payment.status = PaymentStatus.COMPLETED
+            payment.status = PaymentStatus.CONFIRMED
             payment.granted_at = now
             await uow.payments.update(payment)
 
@@ -358,12 +354,3 @@ class ActiveTrialUseCase:
         )
         await uow.payments.add(payment)
         return payment
-
-    async def _audit(self, uow: AbstractUnitOfWork, level: AuditLevel, event: AuditEventType, message: str):
-        await uow.audits.add(
-            AuditLog(
-                level=level,
-                event_type=event,
-                message=message
-            )
-        )

@@ -15,7 +15,6 @@ from aiogram import types
 
 from app.container import build_uow, get_vpn_gateway_factory
 from application.use_cases.accept_user_agreement import AcceptUserAgreementUseCase
-from application.use_cases.cancel_payment import CancelPaymentUseCase
 from application.use_cases.delete_key import DeleteKeyUseCase
 import presentation.telegram.callbacks.callbacks as callbacks
 import presentation.telegram.texts.alerts as alerts
@@ -23,16 +22,6 @@ import presentation.telegram.texts.alerts as alerts
 async def agreement_with_policy(callback_query: types.CallbackQuery) -> None:
     use_case = AcceptUserAgreementUseCase(build_uow())
     await use_case.execute(callback_query.from_user.id, callback_query.from_user.username)
-
-async def cancel_payment(callback_query: types.CallbackQuery, callback_data: callbacks.CancelPaymentCallback) -> str:
-    """Отменяет платёж и возвращает answer."""
-    use_case = CancelPaymentUseCase(build_uow())
-    result = await use_case.execute(callback_query.from_user.id,callback_query.from_user.username)
-
-    if result.success:
-        return alerts.PAYMENT_CANCELED
-    else:
-        return alerts.ERROR
 
 async def delete_key(callback_query: types.CallbackQuery, callback_data: callbacks.DeleteKeyCallback) -> str:
     """Удаляет ключ и возвращает answer."""

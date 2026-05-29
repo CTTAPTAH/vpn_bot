@@ -2,9 +2,9 @@
 from dataclasses import dataclass
 from enum import StrEnum
 
+from application.use_cases.base_use_case import BaseUseCase
 from application.common.dto import KeyDTO
 from application.ports.unit_of_work import AbstractUnitOfWork
-from domain.entities.audit_log import AuditLog
 from domain.enums import AuditLevel, AuditEventType
 from core.utils import utcnow
 
@@ -21,7 +21,7 @@ class SelectedKeyResult:
     vless: str | None = None
     error_type: SelectedKeyErrorType | None = None
 
-class GetSelectedKeyUseCase:
+class GetSelectedKeyUseCase(BaseUseCase):
     """Сценарий получения данных о ключе пользователя."""
     def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow
@@ -33,16 +33,13 @@ class GetSelectedKeyUseCase:
         async with self._uow as uow:
             key = await uow.keys.get_view_by_id(key_id)
             if key is None:
-                await uow.audits.add(
-                    AuditLog(
-                        level=AuditLevel.ERROR,
-                        event_type=AuditEventType.KEY_NOT_FOUND_IN_DB,
-                        message=(
-                            f"Не удалось выдать информацию о ключе.\n"
-                            f"Ключ не найден в базе данных.\n"
-                            f"(key_id={key_id}, tg_id={tg_id})."
-                        )
-                    )
+                await self._audit(
+                    uow,
+                    AuditLevel.ERROR,
+                    AuditEventType.KEY_NOT_FOUND_IN_DB,
+                    f"[GetSelectedKeyUseCase][execute]\n"
+                    f"Ключ не найден в базе данных.\n"
+                    f"key_id={key_id}, tg_id={tg_id}."
                 )
                 return SelectedKeyResult(success=False, error_type=SelectedKeyErrorType.NOT_FOUND_IN_DB)
 

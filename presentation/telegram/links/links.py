@@ -4,6 +4,10 @@ from urllib.parse import quote_plus
 # Документы
 DATA_PROCESSING_POLICY = "https://disk.yandex.ru/i/S7m4KlCaBTOHdw"
 PUBLIC_OFFER = "https://disk.yandex.ru/i/zs4hvz6Ev8Lxzg"
+USER_AGREEMENT = "https://disk.yandex.ru/i/3O2z3CKg19EZgw"
+
+# Бот поддержки
+BOT_SUPPORT = "https://t.me/CheburneshkaSupport_bot"
 
 # Deeplink
 VPN_HOST = "171.22.30.206"

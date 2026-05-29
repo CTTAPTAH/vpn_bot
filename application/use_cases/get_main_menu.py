@@ -1,6 +1,7 @@
 """Backend-логика для формирования данных главного меню."""
 from dataclasses import dataclass
 
+from application.use_cases.base_use_case import BaseUseCase
 from application.ports.unit_of_work import AbstractUnitOfWork
 from core.utils import utcnow
 
@@ -10,7 +11,7 @@ class MainMenuDTO:
     active_keys: int
     trial_used: bool
 
-class GetMainMenuUseCase:
+class GetMainMenuUseCase(BaseUseCase):
     """Сценарий получения данных для главного меню."""
     def __init__(self, uow: AbstractUnitOfWork):
         self._uow = uow

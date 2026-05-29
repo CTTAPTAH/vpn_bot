@@ -4,7 +4,7 @@ from application.ports.vpn.gateway_factory import AbstractVpnGatewayFactory
 from application.ports.vpn.gateway import AbstractVpnGateway
 from domain.entities.server import Server
 import core.config as config
-from infrastructure.xui.http_client import XuiHttpClient
+from infrastructure.http.http_client import HttpClient
 from infrastructure.xui.gateway import XuiVpnGateway
 from infrastructure.xui.api_client import XuiApiClient
 
@@ -16,7 +16,7 @@ class XuiVpnGatewayFactory(AbstractVpnGatewayFactory):
     """
     def __init__(self):
         self._lock = asyncio.Lock()
-        self._clients: dict[int, XuiHttpClient] = {}
+        self._clients: dict[int, HttpClient] = {}
 
     async def get_gateway(self, server: Server) -> AbstractVpnGateway:
         async with self._lock:
@@ -24,7 +24,7 @@ class XuiVpnGatewayFactory(AbstractVpnGatewayFactory):
                 raise ValueError("Server must have id")
 
             if server.id not in self._clients:
-                client = XuiHttpClient(base_url=server.panel_url, timeout=config.HTTP_TIMEOUT)
+                client = HttpClient(base_url=server.panel_url, timeout=config.HTTP_TIMEOUT)
                 await client.start()
                 self._clients[server.id] = client
 

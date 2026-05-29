@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, DateTime, func, ForeignKey, Enum, Index, text
+from sqlalchemy import Integer, DateTime, func, ForeignKey, Enum, Index, text, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from infrastructure.db.base import Base
@@ -37,6 +37,20 @@ class Ticket(Base):
         comment="id пользователя, который отправил это обращение."
     )
 
+    thread_id: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        index=True,
+        unique=True,
+        comment="id топика в группе админов."
+    )
+
+    title: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="Первые символы первого сообщения. Используется как превью в списке обращений."
+    )
+
     status: Mapped[TicketStatus] = mapped_column(
         Enum(TicketStatus, native_enum=False),
         nullable=False,
@@ -49,4 +63,10 @@ class Ticket(Base):
         nullable=False,
         index=True,
         comment="Время создания обращения."
+    )
+
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Время закрытия обращения."
     )

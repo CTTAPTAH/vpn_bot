@@ -13,7 +13,7 @@ class AbstractMessageRepository(ABC):
         ...
 
     @abstractmethod
-    async def get_by_telegram_message_id(self, telegram_message_id) -> Message | None:
+    async def get_all_by_ticket_id(self, ticket_id, limit: int) -> list[Message]:
         ...
 
     @abstractmethod

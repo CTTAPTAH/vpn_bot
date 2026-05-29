@@ -1,7 +1,7 @@
 """
-XUI Integration Exceptions
+Xui Integration Exceptions
 
-Исключения, специфичные для интеграции с XUI API.
+Исключения, специфичные для интеграции с Xui API.
 
 Эти ошибки используются внутри infrastructure слоя.
 Gateway может преобразовывать их в портовые ошибки
@@ -9,19 +9,8 @@ Gateway может преобразовывать их в портовые ош�
 """
 
 class XuiError(Exception):
-    """Базовая ошибка интеграции с XUI."""
+    """Базовая ошибка интеграции с Http."""
     pass
-
-
-class XuiConnectionError(XuiError):
-    """Не удалось установить соединение с XUI."""
-    pass
-
-
-class XuiTimeoutError(XuiError):
-    """Таймаут запроса к XUI API."""
-    pass
-
 
 class XuiAuthenticationError(XuiError):
     """Ошибка авторизации (неверный логин/куки/токен)."""
@@ -29,20 +18,20 @@ class XuiAuthenticationError(XuiError):
 
 
 class XuiRequestError(XuiError):
-    """XUI вернул HTTP ошибку (4xx / 5xx)."""
+    """Xui вернул Xui ошибку (4xx / 5xx)."""
 
     def __init__(self, status_code: int, message: str | None = None):
         self.status_code = status_code
-        super().__init__(message or f"XUI request failed with status {status_code}")
+        super().__init__(message or f"Xui request failed with status {status_code}")
 
 
 class XuiInvalidResponseError(XuiError):
-    """XUI вернул неожиданный или некорректный ответ."""
+    """Xui вернул неожиданный или некорректный ответ."""
     pass
 
 
 class XuiClientNotFoundError(XuiError):
-    """Клиент с указанным email не найден в XUI."""
+    """Клиент с указанным email не найден в Xui."""
     pass
 
 

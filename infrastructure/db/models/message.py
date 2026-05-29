@@ -43,12 +43,6 @@ class Message(Base):
         comment="Сообщение отправителя."
     )
 
-    telegram_message_id: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        comment="id сообщения в телеграмм, под которым пришло админу."
-    )
-
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import (Integer, String, DateTime, ForeignKey, Enum,
+from sqlalchemy import (Integer, String, DateTime, ForeignKey, Enum, Text,
                         UniqueConstraint, text, Index, func, CheckConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -69,6 +69,12 @@ class Payment(Base):
         comment="Сумма платежа."
     )
 
+    payment_method: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Способ оплаты (enum PaymentMethod)"
+    )
+
     type: Mapped[PaymentType] = mapped_column(
         Enum(PaymentType, native_enum=False),
         nullable=False,
@@ -93,6 +99,12 @@ class Payment(Base):
         String(255),
         nullable=False,
         comment="ID платежа у провайдера."
+    )
+
+    payment_url: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Ссылка для оплаты"
     )
 
     status: Mapped[PaymentStatus] = mapped_column(

@@ -18,6 +18,7 @@ from infrastructure.db.repositories.access_key_repository import SQLAlchemyAcces
 from infrastructure.db.repositories.audit_log_repository import SQLAlchemyAuditLogRepository
 from infrastructure.db.repositories.message_repository import SQLAlchemyMessageRepository
 from infrastructure.db.repositories.payment_repository import SQLAlchemyPaymentRepository
+from infrastructure.db.repositories.payment_ui_state_repository import SQLAlchemyPaymentUiStateRepository
 from infrastructure.db.repositories.plan_repository import SQLAlchemyPlanRepository
 from infrastructure.db.repositories.server_repository import SQLAlchemyServerRepository
 from infrastructure.db.repositories.ticket_repository import SQLAlchemyTicketRepository
@@ -27,6 +28,7 @@ from application.ports.repositories.access_key_repository import AbstractAccessK
 from application.ports.repositories.audit_log_repository import AbstractAuditLogRepository
 from application.ports.repositories.message_repository import AbstractMessageRepository
 from application.ports.repositories.payment_repository import AbstractPaymentRepository
+from application.ports.repositories.payment_ui_state_repository import AbstractPaymentUiStateRepository
 from application.ports.repositories.plan_repository import AbstractPlanRepository
 from application.ports.repositories.server_repository import AbstractServerRepository
 from application.ports.repositories.ticket_repository import AbstractTicketRepository
@@ -44,6 +46,7 @@ class SQLAlchemyUnitOfWork(AbstractUnitOfWork):
         self.plans: AbstractPlanRepository | None = None
         self.keys: AbstractAccessKeyRepository | None = None
         self.payments: AbstractPaymentRepository | None = None
+        self.payment_ui_states: AbstractPaymentUiStateRepository | None = None
         self.audits: AbstractAuditLogRepository | None = None
         self.tickets: AbstractTicketRepository | None = None
         self.messages: AbstractMessageRepository | None = None
@@ -56,6 +59,7 @@ class SQLAlchemyUnitOfWork(AbstractUnitOfWork):
         self.plans = SQLAlchemyPlanRepository(self.session)
         self.keys = SQLAlchemyAccessKeyRepository(self.session)
         self.payments = SQLAlchemyPaymentRepository(self.session)
+        self.payment_ui_states = SQLAlchemyPaymentUiStateRepository(self.session)
         self.servers = SQLAlchemyServerRepository(self.session)
         self.audits = SQLAlchemyAuditLogRepository(self.session)
         self.tickets = SQLAlchemyTicketRepository(self.session)
