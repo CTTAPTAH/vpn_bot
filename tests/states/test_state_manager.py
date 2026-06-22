@@ -94,7 +94,7 @@ def test_reset_state_clears_stack(manager):
     """TC-5: reset_state полностью очищает стек пользователя."""
     manager.push_state(USER_ID, Screen.MAIN)
     manager.push_state(USER_ID, Screen.PLANS)
-    manager.push_state(USER_ID, Screen.MY_KEYS)
+    manager.push_state(USER_ID, Screen.MY_SUB)
 
     manager.reset_state(USER_ID)
 
@@ -130,14 +130,14 @@ async def test_go_to_pushes_state(manager):
         original_screens = nav_module.screens
 
         nav_module.state_manager = manager
-        nav_module.screens = {Screen.MY_KEYS: mock_handler}
+        nav_module.screens = {Screen.MY_SUB: mock_handler}
 
         try:
             manager.push_state(USER_ID, Screen.MAIN)
-            await go_to(callback, Screen.MY_KEYS)
+            await go_to(callback, Screen.MY_SUB)
 
             state = manager.get_state(USER_ID)
-            assert state.screen == Screen.MY_KEYS
+            assert state.screen == Screen.MY_SUB
             mock_handler.assert_called_once_with(callback)
         finally:
             nav_module.state_manager = original_sm
@@ -161,7 +161,7 @@ async def test_concurrent_push_no_race_condition(manager):
     await asyncio.gather(
         push_with_lock(Screen.MAIN),
         push_with_lock(Screen.PLANS),
-        push_with_lock(Screen.MY_KEYS),
+        push_with_lock(Screen.MY_SUB),
     )
 
     stack = manager.user_states[USER_ID]
@@ -171,4 +171,4 @@ async def test_concurrent_push_no_race_condition(manager):
     assert len(stack) == 3
     assert Screen.MAIN in screens_in_stack
     assert Screen.PLANS in screens_in_stack
-    assert Screen.MY_KEYS in screens_in_stack
+    assert Screen.MY_SUB in screens_in_stack

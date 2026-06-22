@@ -20,9 +20,9 @@ def _require(value: str, name: str) -> str:
 
 # Бот
 BOT_TOKEN = _require(os.getenv("BOT_TOKEN"), "BOT_TOKEN")
-MAX_KEYS_PER_USER = 5 # Лимит по количеству ключей у пользователя
 MAX_DEVICE_PER_KEY = 3 # Лимит по количеству одновременно подключённых устройств у ключа
-PAYMENT_EXPIRY_THRESHOLD_MINUTES = 5
+PAYMENT_EXPIRY_THRESHOLD_MINUTES = 5 # Время, через которое платёж не восстанавливается, а отменяется
+# при попытке его возобновить
 
 # Бот поддержки
 SUPPORT_BOT_TOKEN = _require(os.getenv("SUPPORT_BOT_TOKEN"), "SUPPORT_BOT_TOKEN")
@@ -36,6 +36,10 @@ PLATEGA_MERCHANT_ID = _require(os.getenv("PLATEGA_MERCHANT_ID"), "PLATEGA_MERCHA
 PLATEGA_API_KEY = _require(os.getenv("PLATEGA_API_KEY"), "PLATEGA_API_KEY")
 CURRENCY = "RUB" # Валюта
 PLATEGA_BASE_URL = "https://app.platega.io"
+
+# Подписка
+SUB_HOST = _require(os.getenv("SUB_HOST"), "SUB_HOST")
+SUB_PROTOCOL = _require(os.getenv("SUB_PROTOCOL"), "SUB_PROTOCOL")
 
 # Retry XUI
 XUI_RETRY_ATTEMPTS = 3 # Количество попыток retry

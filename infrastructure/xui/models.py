@@ -60,11 +60,11 @@ class Inbound:
             settings = {}
 
         clients_data = settings.get("clients", [])
-
         clients = [
             Client.from_dict(c, inbound_id)
             for c in clients_data
         ]
+        stream_settings_raw = data.get("streamSettings") or "{}"
 
         return cls(
             id=inbound_id,
@@ -72,7 +72,7 @@ class Inbound:
             port=int(data.get("port")),
             protocol=data.get("protocol"),
             enabled=data.get("enable", True),
-            stream_settings_raw=settings_raw,
+            stream_settings_raw=stream_settings_raw,
             clients=clients,
         )
 

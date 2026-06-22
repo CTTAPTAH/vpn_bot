@@ -13,7 +13,11 @@ class AbstractServerRepository(ABC):
         ...
 
     @abstractmethod
-    async def get_id_active_servers(self) -> list[int]:
+    async def get_active_servers(self) -> list[Server]:
+        ...
+
+    @abstractmethod
+    async def get_by_ids(self, server_ids: list[int]) -> list[Server]:
         ...
 
     @abstractmethod

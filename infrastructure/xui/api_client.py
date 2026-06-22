@@ -217,7 +217,7 @@ class XuiApiClient:
         sni = reality.get("serverNames", [None])[0]
         short_ids = reality.get("shortIds", [])
         sid = short_ids[0] if short_ids else None
-        spx = reality_settings.get("spiderX")
+        spx = reality_settings.get("spiderX", "/")
 
         return (
             f"vless://{uuid}@{self._host}:{port}?type={type_network}&encryption={encryption}&security={security}"

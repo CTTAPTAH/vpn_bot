@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Подключение VPN</title>
+
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #111827;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+
+        .card {
+            text-align: center;
+            padding: 30px;
+            border-radius: 16px;
+            background: #1f2937;
+            max-width: 320px;
+        }
+
+        .loader {
+            font-size: 40px;
+            margin-bottom: 20px;
+        }
+
+        a {
+            display: inline-block;
+            margin-top: 20px;
+            color: #60a5fa;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="card">
+    <div class="loader">🔐</div>
+
+    <h2>Открываем Happ</h2>
+
+    <p>
+        Сейчас приложение откроется автоматически.
+    </p>
+
+    <a href="{{ happ_url }}">
+        Открыть вручную
+    </a>
+</div>
+
+<script>
+    window.location.href = "{{ happ_url }}";
+</script>
+
+</body>
+</html>

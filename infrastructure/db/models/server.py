@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, DateTime, Boolean, text, func, String, CheckConstraint
+from sqlalchemy import Integer, DateTime, Boolean, text, func, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from infrastructure.db.base import Base
@@ -13,9 +13,6 @@ class Server(Base):
     Это инфраструктурный слой.
     """
     __tablename__ = "servers"
-    __table_args__ = (
-        CheckConstraint("max_clients > 0", name="ck_servers_price_positive"),
-    )
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -69,12 +66,6 @@ class Server(Base):
         String(50),
         nullable=True,
         comment="Название ключа по умолчанию."
-    )
-
-    max_clients: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        comment="Лимит на количество ключей на сервере."
     )
 
     is_active: Mapped[bool] = mapped_column(

@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domain.entities.server import Server as DomainServer, Server
+from domain.entities.server import Server as DomainServer
 from application.ports.repositories.server_repository import AbstractServerRepository
 from infrastructure.db.models.server import Server as ORMServer
 
@@ -16,7 +16,6 @@ def to_domain(orm_server: ORMServer) -> DomainServer:
         inbound_id=orm_server.inbound_id,
         inbound_name=orm_server.inbound_name,
         default_key_name=orm_server.default_key_name,
-        max_clients=orm_server.max_clients
     )
 
 class SQLAlchemyServerRepository(AbstractServerRepository):
@@ -24,7 +23,7 @@ class SQLAlchemyServerRepository(AbstractServerRepository):
         self._session = session
 
     # Получить данные
-    async def get_by_id(self, server_id: int) -> Server | None:
+    async def get_by_id(self, server_id: int) -> DomainServer | None:
         """Получение сервера по id."""
         stmt = select(ORMServer).where(ORMServer.id == server_id)
         result = await self._session.execute(stmt)
@@ -35,10 +34,10 @@ class SQLAlchemyServerRepository(AbstractServerRepository):
 
         return to_domain(orm_server)
 
-    async def get_id_active_servers(self) -> list[int]:
+    async def get_active_servers(self) -> list[DomainServer]:
         """Получить id активных серверов."""
         stmt = (
-            select(ORMServer.id)
+            select(ORMServer)
             .where(ORMServer.is_active.is_(True))
             .order_by(ORMServer.id)
         )
@@ -46,6 +45,11 @@ class SQLAlchemyServerRepository(AbstractServerRepository):
         rows = list(result.scalars().all())
 
         return rows
+
+    async def get_by_ids(self, server_ids: list[int]) -> list[DomainServer]:
+        stmt = select(ORMServer).where(ORMServer.id.in_(server_ids))
+        result = await self._session.execute(stmt)
+        return [to_domain(orm) for orm in result.scalars().all()]
 
     # Добавление данных
     async def add(self, server: DomainServer) -> None:
@@ -58,7 +62,6 @@ class SQLAlchemyServerRepository(AbstractServerRepository):
             inbound_id=server.inbound_id,
             inbound_name=server.inbound_name,
             default_key_name=server.default_key_name,
-            max_clients=server.max_clients
         )
         self._session.add(orm_server)
         await self._session.flush()
@@ -80,4 +83,3 @@ class SQLAlchemyServerRepository(AbstractServerRepository):
         orm_server.inbound_id = server.inbound_id
         orm_server.inbound_name=server.inbound_name
         orm_server.default_key_name = server.default_key_name
-        orm_server.max_clients=server.max_clients

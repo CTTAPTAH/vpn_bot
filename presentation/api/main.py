@@ -1,6 +1,7 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
-from presentation.api.routes import payments
+from presentation.api.routes import payments, subscription, page
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -9,6 +10,10 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(payments.router)
+    app.include_router(subscription.router)
+    app.include_router(page.router)
+
+    app.mount("/img", StaticFiles(directory="presentation/api/templates/img"), name="img")
 
     return app
 

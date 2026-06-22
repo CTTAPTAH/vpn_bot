@@ -21,6 +21,7 @@ from application.ports.repositories.payment_repository import AbstractPaymentRep
 from application.ports.repositories.payment_ui_state_repository import AbstractPaymentUiStateRepository
 from application.ports.repositories.plan_repository import AbstractPlanRepository
 from application.ports.repositories.server_repository import AbstractServerRepository
+from application.ports.repositories.subscription_repository import AbstractSubscriptionRepository
 from application.ports.repositories.ticket_repository import AbstractTicketRepository
 from application.ports.repositories.user_repository import AbstractUserRepository
 
@@ -39,6 +40,7 @@ class AbstractUnitOfWork(ABC):
     payments: AbstractPaymentRepository
     payment_ui_states: AbstractPaymentUiStateRepository
     servers: AbstractServerRepository
+    sub: AbstractSubscriptionRepository
     audits: AbstractAuditLogRepository
     tickets: AbstractTicketRepository
     messages: AbstractMessageRepository

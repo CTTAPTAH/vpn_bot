@@ -1,25 +1,15 @@
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
 
 from domain.entities.access_key import AccessKey as DomainAccessKey
-from application.ports.repositories.access_key_repository import (
-    AbstractAccessKeyRepository,
-    AccessKeyView,
-    ServerKeysLoad
-)
+from application.ports.repositories.access_key_repository import AbstractAccessKeyRepository
 from infrastructure.db.models.access_key import AccessKey as ORMAccessKey
-from infrastructure.db.models.plan import Plan as ORMPlan
-from infrastructure.db.models.server import Server as ORMServer
 
 def to_domain(orm_access_key: ORMAccessKey) -> DomainAccessKey:
     return DomainAccessKey(
         id=orm_access_key.id,
-        user_id=orm_access_key.user_id,
-        plan_id=orm_access_key.plan_id,
         server_id=orm_access_key.server_id,
-        start_at=orm_access_key.start_at,
-        end_at=orm_access_key.end_at,
+        sub_id=orm_access_key.sub_id,
         vless_link=orm_access_key.vless_link
     )
 
@@ -55,129 +45,21 @@ class SQLAlchemyAccessKeyRepository(AbstractAccessKeyRepository):
 
         return to_domain(orm_model)
 
-    async def get_view_by_id(self, access_key_id: int) -> AccessKeyView | None:
-        """Получение информации для отображения ключа по id."""
-        stmt = (
-            select(
-                ORMAccessKey.id,
-                ORMPlan.name,
-                ORMAccessKey.end_at,
-                ORMAccessKey.vless_link
-            )
-            .join(ORMPlan, ORMAccessKey.plan_id == ORMPlan.id)
-            .where(ORMAccessKey.id == access_key_id)
-        )
-        result = await self._session.execute(stmt)
-        row = result.one_or_none()
-
-        if row is None:
-            return None
-
-        return AccessKeyView(
-            id=row.id,
-            plan_name=row.name,
-            end_at=row.end_at,
-            vless_link=row.vless_link
-        )
-
-    async def list_by_user(self, user_id: int) -> list[DomainAccessKey]:
-        """Получить все ключи пользователя."""
+    async def list_by_sub(self, sub_id: int) -> list[DomainAccessKey]:
         stmt = (
             select(ORMAccessKey)
-            .where(ORMAccessKey.user_id == user_id)
-            .order_by(ORMAccessKey.start_at.desc())
+            .where(ORMAccessKey.sub_id == sub_id)
         )
         result = await self._session.execute(stmt)
         orm_keys = result.scalars().all()
 
         return [to_domain(orm_key) for orm_key in orm_keys]
 
-    async def list_view_by_user(self, user_id: int) -> list[AccessKeyView]:
-        """Информация, которая отображается пользователю."""
-        stmt = (
-            select(
-                ORMAccessKey.id,
-                ORMPlan.name,
-                ORMAccessKey.end_at,
-                ORMAccessKey.vless_link
-            )
-            .join(ORMPlan, ORMAccessKey.plan_id == ORMPlan.id)
-            .where(ORMAccessKey.user_id == user_id)
-            .order_by(ORMAccessKey.end_at.desc())
-        )
-        result = await self._session.execute(stmt)
-        rows = result.all()
-
-        return [
-            AccessKeyView(
-                id=row.id,
-                plan_name=row.name,
-                end_at=row.end_at,
-                vless_link=row.vless_link
-            )
-            for row in rows
-        ]
-
-    async def count_all_keys(self, user_id: int) -> int:
-        """Возвращает количество всех ключей пользователя."""
-        stmt = (
-            select(func.count())
-            .select_from(ORMAccessKey)
-            .where(ORMAccessKey.user_id == user_id)
-        )
-
-        result = await self._session.scalar(stmt)
-        return int(result)
-
-    async def count_active_keys(self, user_id: int, now: datetime) -> int:
-        """Возвращает количество активных (не истёкших) ключей пользователя."""
-        stmt = select(func.count(ORMAccessKey.id)).where(
-            ORMAccessKey.user_id == user_id,
-            ORMAccessKey.end_at > now
-        )
-
-        result = await self._session.scalar(stmt)
-        return int(result)
-
-    async def get_servers_keys_load(self, server_ids: list[int]) -> list[ServerKeysLoad]:
-        """Возвращает количество ключей на каждом сервере."""
-        if not server_ids:
-            return []
-
-        stmt = (
-            select(
-                ORMServer.id,
-                func.count(ORMAccessKey.id),
-                ORMServer.max_clients
-            )
-            .outerjoin(
-                ORMAccessKey,
-                ORMAccessKey.server_id == ORMServer.id
-            )
-            .where(ORMServer.id.in_(server_ids))
-            .group_by(ORMServer.id)
-            .order_by(ORMServer.id)
-        )
-        result = await self._session.execute(stmt)
-        rows = result.all()
-
-        return [
-            ServerKeysLoad(
-                server_id=row[0],
-                keys_count=row[1],
-                max_clients=row[2]
-            )
-            for row in rows
-        ]
-
     # Добавление данных
     async def add(self, access_key: DomainAccessKey) -> None:
         orm_key = ORMAccessKey(
-            user_id=access_key.user_id,
-            plan_id=access_key.plan_id,
             server_id=access_key.server_id,
-            start_at=access_key.start_at,
-            end_at=access_key.end_at,
+            sub_id=access_key.sub_id,
             vless_link=access_key.vless_link
         )
         self._session.add(orm_key)
@@ -192,9 +74,6 @@ class SQLAlchemyAccessKeyRepository(AbstractAccessKeyRepository):
         if orm_key is None:
             raise ValueError("AccessKey not found")
 
-        orm_key.user_id = access_key.user_id
-        orm_key.plan_id = access_key.plan_id
-        orm_key.end_at = access_key.end_at
         orm_key.vless_link = access_key.vless_link
 
     # Удаление данных

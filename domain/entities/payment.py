@@ -20,7 +20,7 @@ class Payment:
     status: PaymentStatus = PaymentStatus.PENDING
     created_at: datetime = field(default_factory=utcnow)
     id: int | None = None
-    key_id: int | None = None
+    sub_id: int | None = None
     payment_method: PaymentMethod | None = None
     payment_url: str | None = None
     granted_at: datetime | None = None

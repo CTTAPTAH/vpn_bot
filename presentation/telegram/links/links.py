@@ -1,5 +1,6 @@
 """В файле храним ссылки, которые ведут на другие ресурсы."""
 from urllib.parse import quote_plus
+import core.config as config
 
 # Документы
 DATA_PROCESSING_POLICY = "https://disk.yandex.ru/i/S7m4KlCaBTOHdw"
@@ -9,39 +10,33 @@ USER_AGREEMENT = "https://disk.yandex.ru/i/3O2z3CKg19EZgw"
 # Бот поддержки
 BOT_SUPPORT = "https://t.me/CheburneshkaSupport_bot"
 
-# Deeplink
-VPN_HOST = "171.22.30.206"
-def v2raytun_deeplink(vless: str) -> str:
-    """Генерирует deeplink для  v2RayTun."""
-    inner = quote_plus(vless)
-    return f"v2raytun://import?url={inner}"
+# Формирование ссылок на подписку
+def sub_url(token: str) -> str:
+    """Универсальная ссылка подписки для v2rayTUN, NekoBox и др."""
+    return f"http://{config.SUB_HOST}/sub/{token}"
 
-# Apple
-APPLE_V2RAY_APP = "https://apps.apple.com/ru/app/v2raytun/id6476628951"
-APPLE_V2BOX_APP = "https://apps.apple.com/ru/app/v2box-v2ray-client/id6446814690"
-APPLE_HAPP_GLOBAL ="https://apps.apple.com/us/app/happ-proxy-utility/id6504287215"
-APPLE_HAPP_RU = "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"
-def v2raytun_ios_link(vless: str) -> str:
-    """Используется в боте для кнопки "Настроить соединение" для IOS."""
-    deeplink = quote_plus(v2raytun_deeplink(vless))
-    return f"https://{VPN_HOST}/redirect_ios.html?deeplink={deeplink}"
+def happ_deeplink(token: str) -> str:
+    """Deeplink для открытия подписки в Happ."""
+    return f"happ://add/{sub_url(token)}"
+
+def sub_page(token: str) -> str:
+    """Ссылка на сайт с информацией о подписке."""
+    return  f"{config.SUB_PROTOCOL}://{config.SUB_HOST}/page/info/{token}"
+
+def happ_redirect(token: str) -> str:
+    """Ссылка на сайт с redirect в приложение Happ."""
+    return f"{config.SUB_PROTOCOL}://{config.SUB_HOST}/page/{token}"
+
+# IOS
+IOS_HAPP = "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"
+IOS_V2RAYTUN = "https://apps.apple.com/us/app/v2raytun/id6476628951"
 
 # Android
-ANDROID_V2RAY_APP = "https://play.google.com/store/apps/details?id=com.v2raytun.android&hl=ru&ysclid=mkp8j454tn760580671"
-ANDROID_V2BOX_APP = "https://play.google.com/store/apps/details/V2Box+-+V2ray+Client?id=dev.hexasoftware.v2box&hl=ru&ysclid=mkp8ifanmc128980019"
 ANDROID_HAPP = "https://play.google.com/store/apps/details?id=com.happproxy"
-def v2raytun_android_link(vless: str) -> str:
-    """Используется в боте для кнопки "Настроить соединение" для Android."""
-    deeplink = quote_plus(v2raytun_deeplink(vless))
-    return f"https://{VPN_HOST}/redirect_android.html?deeplink={deeplink}"
-
-# Windows
-WINDOWS_NEKORAY_APP = "https://github.com/MatsuriDayo/nekoray/releases"
-WINDOWS_AMNEZIA_APP = "https://amnezia.org/ru/downloads"
-
-# Apple TV
-APPLE_TV_SHADOWROCKET = "https://apps.apple.com/ua/app/shadowrocket/id932747118?l=ru&platform=tv"
-
-# HUAWEI
-HUAWEI_V2RAYTUN = "https://apkpure.net/ru/v2raytun-app/com.v2raytun.android?ysclid=ml24n1u09w793029480"
 HUAWEI_HAPP = "https://github.com/Happ-proxy/happ-android/releases/latest/download/Happ.apk"
+ANDROID_V2RAYTUN = "https://play.google.com/store/apps/details?id=com.v2raytun.android"
+HUAWEI_V2RAYTUN = "https://github.com/DigneZzZ/v2raytun/releases/download/5.23.73/v2RayTun_universal.apk"
+
+# COMPUTER
+COMPUTER_HAPP = "https://www.happ.su/main/ru"
+COMPUTER_V2RAYTUN = "https://v2raytun.com/"

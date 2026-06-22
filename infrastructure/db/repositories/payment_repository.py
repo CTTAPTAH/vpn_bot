@@ -11,9 +11,9 @@ def to_domain(orm_payment: ORMPayment) -> DomainPayment:
         id=orm_payment.id,
         user_id=orm_payment.user_id,
         plan_id=orm_payment.plan_id,
-        key_id=orm_payment.key_id,
+        sub_id=orm_payment.sub_id,
         price=orm_payment.price,
-        payment_method=PaymentMethod(orm_payment.payment_method),
+        payment_method=PaymentMethod(orm_payment.payment_method) if orm_payment.payment_method is not None else None,
         type=orm_payment.type,
         action=orm_payment.action,
         provider=orm_payment.provider,
@@ -130,9 +130,9 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
         orm_payment = ORMPayment(
             user_id=payment.user_id,
             plan_id=payment.plan_id,
-            key_id=payment.key_id,
+            sub_id=payment.sub_id,
             price=payment.price,
-            payment_method=int(payment.payment_method),
+            payment_method=int(payment.payment_method) if payment.payment_method is not None else None,
             type=payment.type,
             action=payment.action,
             provider=payment.provider,
@@ -155,8 +155,8 @@ class SQLAlchemyPaymentRepository(AbstractPaymentRepository):
         if orm_payment is None:
             raise ValueError("Payment not found")
 
-        orm_payment.key_id = payment.key_id
+        orm_payment.sub_id = payment.sub_id
         orm_payment.status = payment.status
-        orm_payment.payment_method = int(payment.payment_method)
+        orm_payment.payment_method = int(payment.payment_method) if payment.payment_method is not None else None
         orm_payment.granted_at = payment.granted_at
         orm_payment.paid_at = payment.paid_at

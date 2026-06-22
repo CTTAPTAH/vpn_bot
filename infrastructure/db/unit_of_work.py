@@ -21,6 +21,7 @@ from infrastructure.db.repositories.payment_repository import SQLAlchemyPaymentR
 from infrastructure.db.repositories.payment_ui_state_repository import SQLAlchemyPaymentUiStateRepository
 from infrastructure.db.repositories.plan_repository import SQLAlchemyPlanRepository
 from infrastructure.db.repositories.server_repository import SQLAlchemyServerRepository
+from infrastructure.db.repositories.subscription_repository import SQLAlchemySubscriptionRepository
 from infrastructure.db.repositories.ticket_repository import SQLAlchemyTicketRepository
 from infrastructure.db.repositories.user_repository import SQLAlchemyUserRepository
 
@@ -31,6 +32,7 @@ from application.ports.repositories.payment_repository import AbstractPaymentRep
 from application.ports.repositories.payment_ui_state_repository import AbstractPaymentUiStateRepository
 from application.ports.repositories.plan_repository import AbstractPlanRepository
 from application.ports.repositories.server_repository import AbstractServerRepository
+from application.ports.repositories.subscription_repository import AbstractSubscriptionRepository
 from application.ports.repositories.ticket_repository import AbstractTicketRepository
 from application.ports.repositories.user_repository import AbstractUserRepository
 
@@ -43,6 +45,7 @@ class SQLAlchemyUnitOfWork(AbstractUnitOfWork):
         # Репозитории (будут созданы при входе в контекст)
         self.users: AbstractUserRepository | None = None
         self.servers: AbstractServerRepository | None = None
+        self.sub: AbstractSubscriptionRepository | None = None
         self.plans: AbstractPlanRepository | None = None
         self.keys: AbstractAccessKeyRepository | None = None
         self.payments: AbstractPaymentRepository | None = None
@@ -61,6 +64,7 @@ class SQLAlchemyUnitOfWork(AbstractUnitOfWork):
         self.payments = SQLAlchemyPaymentRepository(self.session)
         self.payment_ui_states = SQLAlchemyPaymentUiStateRepository(self.session)
         self.servers = SQLAlchemyServerRepository(self.session)
+        self.sub = SQLAlchemySubscriptionRepository(self.session)
         self.audits = SQLAlchemyAuditLogRepository(self.session)
         self.tickets = SQLAlchemyTicketRepository(self.session)
         self.messages = SQLAlchemyMessageRepository(self.session)

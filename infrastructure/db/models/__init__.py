@@ -5,5 +5,6 @@ from infrastructure.db.models.payment import Payment
 from infrastructure.db.models.payment_ui_state import PaymentUiState
 from infrastructure.db.models.plan import Plan
 from infrastructure.db.models.server import Server
+from infrastructure.db.models.subscription import Subscription
 from infrastructure.db.models.ticket import Ticket
 from infrastructure.db.models.user import User

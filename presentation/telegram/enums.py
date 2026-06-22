@@ -7,7 +7,6 @@ Enum-классы слоя представления (бота).
 
 from enum import StrEnum
 
-# Бот
 class Action(StrEnum):
     """
     Действия бота.
@@ -18,3 +17,11 @@ class Action(StrEnum):
     AGREE = "AGREE"
     CANCEL_PAYMENT = "CANCEL_PAYMENT"
     DELETE_KEY = "DELETE_KEY"
+
+class Platform(StrEnum):
+    IPHONE = "iphone"
+    ANDROID = "android"
+    HUAWEI = "huawei"
+    APPLE_TV = "apple_tv"
+    ANDROID_TV = "android_tv"
+    COMPUTER = "computer"

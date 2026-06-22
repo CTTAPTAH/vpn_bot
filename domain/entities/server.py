@@ -16,7 +16,6 @@ class Server:
     host: str
     inbound_id: int
     default_key_name: str
-    max_clients: int
     id: int | None = None
     inbound_name: str | None = None
     is_active: bool = True

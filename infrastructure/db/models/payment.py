@@ -56,11 +56,11 @@ class Payment(Base):
         comment="Тариф, за который был произведён платеж."
     )
 
-    key_id: Mapped[int | None] = mapped_column(
-        ForeignKey("access_keys.id", ondelete="SET NULL"),
+    sub_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subscriptions.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="Связь с подпиской/ключом, который был выдан по этому платежу."
+        comment="Связь с подпиской, который был выдан по этому платежу."
     )
 
     price: Mapped[int] = mapped_column(

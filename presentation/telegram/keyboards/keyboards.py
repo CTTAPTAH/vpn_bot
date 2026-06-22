@@ -5,9 +5,9 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from application.use_cases.get_available_plans import PlanDTO
-from application.common.dto import KeyDTO
 from presentation.telegram.enums import Action
 from presentation.telegram.states.states import Screen
+from presentation.telegram.enums import Platform
 from presentation.telegram.texts.plan_presentation import PLAN_PRESENTATION_BY_MONTHS, PlanPresentation
 import presentation.telegram.callbacks.callbacks as callbacks
 import presentation.telegram.links.links as links
@@ -16,8 +16,8 @@ import domain.enums as enums
 # Часто используемы кнопки
 BTN_BACK = InlineKeyboardButton(text="⬅️ Назад", callback_data=Action.BACK)
 BTN_MAIN_MENU = InlineKeyboardButton(text="🏠 Главное меню", callback_data=Action.GO_BACK_TO_MENU)
-BTN_HELP = InlineKeyboardButton(text="💬 Поддержка", url=links.BOT_SUPPORT)
-BTN_MY_KEYS = InlineKeyboardButton(text="🔑 Мои ключи", callback_data=Screen.MY_KEYS)
+BTN_SUPPORT = InlineKeyboardButton(text="💬 Поддержка", url=links.BOT_SUPPORT)
+BTN_MY_SUB = InlineKeyboardButton(text="📋 Моя подписка", callback_data=Screen.MY_SUB)
 
 # Клавиатура для возврата
 def kb_back() -> InlineKeyboardMarkup:
@@ -30,28 +30,31 @@ def kb_back() -> InlineKeyboardMarkup:
 def kb_error() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [BTN_HELP],
+            [BTN_SUPPORT],
             [BTN_BACK]
         ]
     )
 
 # ===== Главное меню =====
-def kb_main(has_trial: bool = False) -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton(
+def kb_main(has_trial: bool, is_sub_active: bool, sub_id: int | None) -> InlineKeyboardMarkup:
+    buttons = []
+
+    if is_sub_active:
+        buttons.append([InlineKeyboardButton(
+            text="🔄 Продлить доступ",
+            callback_data=callbacks.PlansCallback(action=enums.PaymentAction.RENEW, sub_id=sub_id).pack()
+        )])
+    else:
+        buttons.append([InlineKeyboardButton(
             text="💳 Купить доступ",
             callback_data=callbacks.PlansCallback(action=enums.PaymentAction.CREATE).pack()
-        )],
-        [BTN_MY_KEYS]
-    ]
+        )])
 
     if has_trial:
         buttons.append([InlineKeyboardButton(text="🎁 Пробный период", callback_data=Screen.TRIAL)])
 
-    buttons.append(
-        [InlineKeyboardButton(text="📱 Настроить защищённое подключение", callback_data=Screen.INSTRUCTION)]
-    )
-    buttons.append([BTN_HELP])
+    buttons.append([BTN_MY_SUB])
+    buttons.append([BTN_SUPPORT])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -67,7 +70,7 @@ def kb_view_agreement() -> InlineKeyboardMarkup:
 
 # Тарифы, покупка
 def kb_plans(action: enums.PaymentAction, plans: list[PlanDTO],
-             pending_payment_id: int, *, key_id: int | None = None) -> InlineKeyboardMarkup:
+             pending_payment_id: int, *, sub_id: int | None = None) -> InlineKeyboardMarkup:
     buttons = []
 
     for plan in plans:
@@ -75,7 +78,7 @@ def kb_plans(action: enums.PaymentAction, plans: list[PlanDTO],
         text = f"{presentation.emoji} {plan.name} — {plan.price} ₽"
         buttons.append([InlineKeyboardButton(
                 text=text,
-                callback_data=callbacks.PurchasePendingCallback(action=action, plan_id=plan.id, key_id=key_id).pack()
+                callback_data=callbacks.PurchasePendingCallback(action=action, plan_id=plan.id, sub_id=sub_id).pack()
             )])
     if pending_payment_id is not None:
         buttons.append([InlineKeyboardButton(
@@ -83,7 +86,7 @@ def kb_plans(action: enums.PaymentAction, plans: list[PlanDTO],
             callback_data=callbacks.PurchasePendingCallback(
                 action=action,
                 plan_id=pending_payment_id,
-                key_id=key_id).pack()
+                sub_id=sub_id).pack()
         )])
     buttons.append([BTN_BACK])
 
@@ -95,10 +98,18 @@ def kb_purchase_pending(payment_link: str) -> InlineKeyboardMarkup:
         [BTN_BACK]
     ])
 
-def kb_purchase_success() -> InlineKeyboardMarkup:
+def kb_purchase_success(sub_token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="▶️ Продолжить", callback_data=Screen.INSTRUCTION)],
-        [BTN_MY_KEYS],
+        #[InlineKeyboardButton(text="📱 Открыть в Happ", url=links.happ_deeplink(sub_token))],
+        #[InlineKeyboardButton(text="📱 Открыть в v2rayTUN", url=links.sub_url(sub_token))],
+        [InlineKeyboardButton(text="❓ Как подключиться", callback_data=Screen.INSTRUCTION)],
+        [BTN_MY_SUB],
+        [BTN_MAIN_MENU]
+    ])
+
+def kb_renew_success() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [BTN_MY_SUB],
         [BTN_MAIN_MENU]
     ])
 
@@ -107,198 +118,124 @@ def kb_purchase_canceled() -> InlineKeyboardMarkup:
         [BTN_MAIN_MENU]
     ])
 
-
 # Пробный период
-def kb_trial() -> InlineKeyboardMarkup:
+def kb_trial(sub_token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📖 Перейти к инструкции", callback_data=Screen.INSTRUCTION)],
-        [BTN_HELP],
-        [BTN_BACK]
+        #[InlineKeyboardButton(text="📱 Открыть в Happ", url=links.happ_redirect(sub_token))],
+        [InlineKeyboardButton(text="❓ Как подключиться", callback_data=Screen.INSTRUCTION)],
+        [BTN_MY_SUB],
+        [BTN_MAIN_MENU]
     ])
 
-def kb_trial_limit(keys: list[KeyDTO]) -> InlineKeyboardMarkup:
+# Моя подписка
+def kb_my_sub(sub_token: str | None, sub_id: int | None) -> InlineKeyboardMarkup:
     buttons = []
 
-    # кнопки тарифов
-    for i, key in enumerate(keys, start=1):
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"{i}. {key.plan_name}",
-                callback_data=callbacks.ExtendTrialCallback(key_id=key.id).pack()
-            )
-        ])
+    if sub_token is not None:
+        #buttons.append([InlineKeyboardButton(text="📱 Открыть в Happ", url=links.happ_redirect(sub_token))])
+        pass
 
-    # помощь и назад
-    buttons.append([BTN_HELP])
+    if sub_token is None:
+        buttons.append([InlineKeyboardButton(
+            text="💳 Купить доступ",
+            callback_data=callbacks.PlansCallback(action=enums.PaymentAction.CREATE).pack()
+        )])
+
+    if sub_token is not None:
+        buttons.append([InlineKeyboardButton(text="❓ Как подключиться", callback_data=Screen.INSTRUCTION)])
+        buttons.append([InlineKeyboardButton(
+            text="🔄 Продлить доступ",
+            callback_data=callbacks.PlansCallback(action=enums.PaymentAction.RENEW, sub_id=sub_id).pack()
+        )])
+
     buttons.append([BTN_BACK])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def kb_extend_trial() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📖 Инструкция", callback_data=Screen.INSTRUCTION)],
-        [BTN_MY_KEYS],
-        [BTN_MAIN_MENU],
-    ])
-
-# Мои ключи
-def kb_my_keys(keys: list[KeyDTO]) -> InlineKeyboardMarkup:
-    buttons = []
-
-    for i, key in enumerate(keys, start=1):
-        emoji = "🔴" if key.is_expired else "🟢"
-        date = key.end_at.strftime("%d.%m")
-
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"{emoji} Ключ {i} до {date}",
-                callback_data=callbacks.SelectedKeyCallback(key_id=key.id).pack()
-            )
-        ])
-    buttons.append([BTN_BACK])
-
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def kb_selected_key(key_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📖 Инструкция подключения", callback_data=Screen.INSTRUCTION)],
-        [InlineKeyboardButton(
-            text="💳 Продлить доступ",
-            callback_data=callbacks.PlansCallback(action=enums.PaymentAction.RENEW, key_id=key_id).pack()
-        )],
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
 
 # ===== Инструкции =====
 def kb_instruction() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Apple", callback_data=Screen.APPLE)],
-        [InlineKeyboardButton(text="Android", callback_data=Screen.ANDROID)],
-        [InlineKeyboardButton(text="Windows", callback_data=Screen.WINDOWS)],
-        [InlineKeyboardButton(text="TV", callback_data=Screen.TV)],
-        [InlineKeyboardButton(text="HUAWEI", callback_data=Screen.HUAWEI)],
-        [BTN_BACK]
+        [InlineKeyboardButton(text="📱 Телефон", callback_data=Screen.PHONE)],
+        [InlineKeyboardButton(text="💻 Компьютер", callback_data=Screen.COMPUTER)],
+        [InlineKeyboardButton(text="📺 Телевизор", callback_data=Screen.TV)],
+        [BTN_BACK],
     ])
 
-# APPLE
-def kb_apple(vless_link: str) -> InlineKeyboardMarkup:
+# Happ
+def kb_happ_setup(platform: Platform) -> InlineKeyboardMarkup:
+    download_url = _get_happ_download_url(platform)
+    problems_screen = _get_problems_screen(platform)
+
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить приложение", url=links.APPLE_V2RAY_APP)],
-        [InlineKeyboardButton(text="Возникли проблемы", callback_data=Screen.PROBLEMS_APPLE)],
-        [InlineKeyboardButton(text="2-й способ подключения", callback_data=Screen.SECOND_METHOD_APPLE)],
-        [BTN_BACK]
+        [InlineKeyboardButton(text="📥 Скачать Happ", url=download_url)],
+        [InlineKeyboardButton(text="❓ Не получается?", callback_data=problems_screen)],
+        [BTN_SUPPORT],
+        [BTN_BACK],
     ])
+def _get_problems_screen(platform: Platform) -> Screen:
+    match platform:
+        case Platform.IPHONE:
+            return Screen.PROBLEM_IPHONE
+        case Platform.ANDROID:
+            return Screen.PROBLEM_ANDROID
+        case Platform.HUAWEI:
+            return Screen.PROBLEM_HUAWEI
+        case Platform.APPLE_TV:
+            return Screen.PROBLEM_APPLE_TV
+        case Platform.ANDROID_TV:
+            return Screen.PROBLEM_ANDROID_TV
+        case Platform.COMPUTER:
+            return Screen.PROBLEM_COMPUTER
+        case _:
+            raise ValueError(f"Unknown platform: {platform}")
+def _get_happ_download_url(platform: Platform) -> str:
+    match platform:
+        case Platform.IPHONE | Platform.APPLE_TV:
+            return links.IOS_HAPP
+        case Platform.ANDROID | Platform.ANDROID_TV:
+            return links.ANDROID_HAPP
+        case Platform.HUAWEI:
+            return links.HUAWEI_HAPP
+        case Platform.COMPUTER:
+            return links.COMPUTER_HAPP
+        case _:
+            raise ValueError(f"Unknown platform: {platform}")
 
-def kb_problems_apple() -> InlineKeyboardMarkup:
+# v2rayTun
+def kb_v2raytun_setup(platform: Platform) -> InlineKeyboardMarkup:
+    download_url = _get_v2raytun_download_url(platform)
+
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Если подключение не установлено", callback_data=Screen.NO_CONNECTION_APPLE)],
-        [BTN_HELP],
-        [BTN_MY_KEYS],
-        [BTN_BACK]
+        [InlineKeyboardButton(text="📥 Скачать v2rayTun", url=download_url)],
+        [BTN_SUPPORT],
+        [BTN_BACK],
     ])
+def _get_v2raytun_download_url(platform: Platform) -> str:
+    match platform:
+        case Platform.IPHONE | Platform.APPLE_TV:
+            return links.IOS_V2RAYTUN
+        case Platform.ANDROID | Platform.ANDROID_TV:
+            return links.ANDROID_V2RAYTUN
+        case Platform.HUAWEI:
+            return links.HUAWEI_V2RAYTUN
+        case Platform.COMPUTER:
+            return links.COMPUTER_V2RAYTUN
+        case _:
+            raise ValueError(f"Unknown platform: {platform}")
 
-def kb_no_connection_apple() -> InlineKeyboardMarkup:
+# Телефон
+def kb_phone() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [BTN_HELP],
-        [BTN_BACK]
+        [InlineKeyboardButton(text="🍎 iPhone", callback_data=Screen.IPHONE)],
+        [InlineKeyboardButton(text="🤖 Android", callback_data=Screen.ANDROID)],
+        [InlineKeyboardButton(text="🌸 Huawei", callback_data=Screen.HUAWEI)],
+        [BTN_BACK],
     ])
 
-def kb_second_method_apple() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить \"Happ Global\"", url=links.APPLE_HAPP_GLOBAL)],
-        [InlineKeyboardButton(text="Установить \"Happ RU\"", url=links.APPLE_HAPP_RU)],
-        [BTN_MY_KEYS],
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
-
-# ANDROID
-def kb_android(vless_link: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить приложение", url=links.APPLE_V2RAY_APP)],
-        [InlineKeyboardButton(text="Возникли проблемы", callback_data=Screen.PROBLEMS_ANDROID)],
-        [InlineKeyboardButton(text="2-й способ подключения", callback_data=Screen.SECOND_METHOD_ANDROID)],
-        [BTN_BACK]
-    ])
-
-def kb_problems_android() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Если подключение не установлено", callback_data=Screen.NO_CONNECTION_ANDROID)],
-        [BTN_HELP],
-        [BTN_MY_KEYS],
-        [BTN_BACK]
-    ])
-
-def kb_no_connection_android() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
-
-def kb_second_method_android() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить \"Happ\"", url=links.ANDROID_HAPP)],
-        [BTN_MY_KEYS],
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
-
-# WINDOWS
-def kb_windows() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Защищённое подключение для отдельных приложений/сайтов", callback_data=Screen.PC_APPS)],
-        [BTN_MY_KEYS],
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
-
-def kb_pc_apps() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить \"AmneziaVPN\"", url=links.WINDOWS_AMNEZIA_APP)],
-        [BTN_MY_KEYS],
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
-
-# TV
+# Телевизор
 def kb_tv() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Android TV", callback_data=Screen.ANDROID_TV)],
-        [InlineKeyboardButton(text="Apple TV", callback_data=Screen.APPLE_TV)],
-        [BTN_BACK]
-    ])
-
-def kb_android_tv() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить \"V2RayTun\"", url=links.APPLE_V2RAY_APP)],
-        [BTN_MY_KEYS],
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
-
-def kb_apple_tv() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить \"V2RayTun\"", url=links.APPLE_TV_SHADOWROCKET)],
-        [BTN_MY_KEYS],
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
-
-# HUAWEI
-def kb_huawei() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить приложение", url=links.HUAWEI_V2RAYTUN)],
-        [BTN_MY_KEYS],
-        [InlineKeyboardButton(text="2-й способ подключения", callback_data=Screen.SECOND_METHOD_HUAWEI)],
-        [BTN_HELP],
-        [BTN_BACK]
-    ])
-
-def kb_second_method_huawei() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Установить \"Happ\"", url=links.HUAWEI_HAPP)],
-        [BTN_MY_KEYS],
-        [BTN_HELP],
-        [BTN_BACK]
+        [InlineKeyboardButton(text="🍎 Apple TV", callback_data=Screen.APPLE_TV)],
+        [InlineKeyboardButton(text="🤖 Android TV", callback_data=Screen.ANDROID_TV)],
+        [BTN_BACK],
     ])

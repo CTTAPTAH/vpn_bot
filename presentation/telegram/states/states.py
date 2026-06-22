@@ -26,36 +26,34 @@ class Screen(StrEnum):
 
     # Пробный период
     TRIAL = "trial"
-    EXTEND_TRIAL = "extend_trial"
     
     # Мои ключи
-    MY_KEYS = "my_keys"
-    SELECTED_KEY = "selected_key"
+    MY_SUB = "my_sub"
     
     # ===== Инструкции =====
     INSTRUCTION = "instruction"
 
-    # APPLE
-    APPLE = "apple"
-    PROBLEMS_APPLE = "problems_apple"
-    NO_CONNECTION_APPLE = "no_connection_apple"
-    SECOND_METHOD_APPLE = "second_method_apple"
-    
-    # ANDROID
+    # Телефон
+    PHONE = "phone"
+    # Iphone
+    IPHONE = "iphone"
+    PROBLEM_IPHONE = "problem_iphone"
+    # Android
     ANDROID = "android"
-    PROBLEMS_ANDROID = "problems_android"
-    NO_CONNECTION_ANDROID = "no_connection_android"
-    SECOND_METHOD_ANDROID = "second_method_android"
-    
-    # WINDOWS
-    WINDOWS = "windows"
-    PC_APPS = "pc_apps"
-    
-    # TV
-    TV = "tv"
-    ANDROID_TV = "android_tv"
-    APPLE_TV = "apple_tv"
-    
-    # HUAWEI
+    PROBLEM_ANDROID = "problem_android"
+    # Huawei
     HUAWEI = "huawei"
-    SECOND_METHOD_HUAWEI = "second_method_huawei"
+    PROBLEM_HUAWEI = "problem_huawei"
+
+    # ПК
+    COMPUTER = "computer"
+    PROBLEM_COMPUTER = "problem_computer"
+
+    # Телевизор
+    TV = "tv"
+    # Apple TV
+    APPLE_TV = "apple_tv"
+    PROBLEM_APPLE_TV = "problem_apple_tv"
+    # Android TV
+    ANDROID_TV = "android_tv"
+    PROBLEM_ANDROID_TV = "problem_android_tv"

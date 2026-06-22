@@ -11,6 +11,10 @@ def utcnow() -> datetime:
     """Текущее время UTC."""
     return datetime.now(UTC)
 
+def generate_sub_token() -> str:
+    """Генерирует уникальный токен для URL подписки пользователя."""
+    return uuid4().hex
+
 def add_seconds_to_now(seconds: int) -> datetime:
     """Добавить секунды к текущему времени."""
     return utcnow() + timedelta(seconds=seconds)
@@ -34,3 +38,13 @@ def ms_to_datetime(ms: int) -> datetime:
 def new_uuid() -> str:
     """Генерирует uuid."""
     return str(uuid4())
+
+MONTHS_RU = {
+    1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+    5: "мая", 6: "июня", 7: "июля", 8: "августа",
+    9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+}
+
+def format_date_ru(dt: datetime) -> str:
+    """Форматирует дату и время в русском формате: 8 июня 2026, 14:30."""
+    return f"{dt.day} {MONTHS_RU[dt.month]} {dt.year}, {dt.hour:02d}:{dt.minute:02d}"

@@ -8,7 +8,7 @@ import asyncio
 import logging
 import uvicorn
 
-from app.container import get_vpn_gateway_factory, get_platega_client, close_platega_client
+from app.container import get_vpn_gateway_factory, close_platega_client
 from presentation.telegram.bot import bot, dp
 from presentation.telegram.handlers.handlers import register_handlers
 from presentation.support.bot import bot as support_bot, dp as support_dp

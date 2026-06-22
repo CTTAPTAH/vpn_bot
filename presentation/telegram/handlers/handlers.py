@@ -39,8 +39,8 @@ def register_handlers():
 
       else:
          await message.answer(
-            texts.txt_main(dto.active_keys),
-            reply_markup=keyboards.kb_main(not dto.trial_used)
+            texts.txt_main(dto.sub_end_at, dto.is_sub_active),
+            reply_markup=keyboards.kb_main(not dto.trial_used, dto.is_sub_active, dto.sub_id)
          )
          state_manager.reset_state(message.from_user.id)
          state_manager.push_state(message.from_user.id, Screen.MAIN)
@@ -91,92 +91,67 @@ def register_handlers():
    async def process_active_trial(callback_query: types.CallbackQuery):
       await go_to(callback_query, Screen.TRIAL)
 
-   @router.callback_query(callbacks.ExtendTrialCallback.filter())
-   async def process_extend_trial(callback_query: types.CallbackQuery, callback_data: callbacks.ExtendTrialCallback):
-      await go_to(callback_query, Screen.EXTEND_TRIAL, data=callback_data)
-
    # Мои ключи
-   @router.callback_query(F.data == Screen.MY_KEYS)
+   @router.callback_query(F.data == Screen.MY_SUB)
    async def process_my_keys(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.MY_KEYS)
-
-   @router.callback_query(callbacks.SelectedKeyCallback.filter())
-   async def process_selected_key(callback_query: types.CallbackQuery, callback_data: callbacks.SelectedKeyCallback):
-      await go_to(callback_query, Screen.SELECTED_KEY, data=callback_data)
-
-   @router.callback_query(callbacks.DeleteKeyCallback.filter())
-   async def process_key_deleted(callback_query: types.CallbackQuery, callback_data: callbacks.DeleteKeyCallback):
-      answer = await actions.delete_key(callback_query, callback_data)
-      await go_back_to(callback_query, Screen.MY_KEYS, answer=answer)
+      await go_to(callback_query, Screen.MY_SUB)
 
    # ===== Инструкции =====
    @router.callback_query(F.data == Screen.INSTRUCTION)
    async def process_instruction(callback_query: types.CallbackQuery):
       await go_to(callback_query, Screen.INSTRUCTION)
 
-   # 2.1. Инструкция - Apple
-   @router.callback_query(F.data == Screen.APPLE)
-   async def process_apple(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.APPLE)
-   # 2.1.1. Инструкция - Apple - Проблемы
-   @router.callback_query(F.data == Screen.PROBLEMS_APPLE)
-   async def process_problems_apple(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.PROBLEMS_APPLE)
-   # 2.1.1.1 Инструкция - Apple - Проблемы - Подключения нет
-   @router.callback_query(F.data == Screen.NO_CONNECTION_APPLE)
-   async def process_no_connection_apple(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.NO_CONNECTION_APPLE)
-   # 2.1.2. Инструкция - Apple - 2 способ
-   @router.callback_query(F.data == Screen.SECOND_METHOD_APPLE)
-   async def process_second_method_apple(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.SECOND_METHOD_APPLE)
-
-   # 2.2. Инструкция - Android
+   # Телефон
+   @router.callback_query(F.data == Screen.PHONE)
+   async def process_instruction(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.PHONE)
+   # Iphone
+   @router.callback_query(F.data == Screen.IPHONE)
+   async def process_iphone(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.IPHONE)
+   @router.callback_query(F.data == Screen.PROBLEM_IPHONE)
+   async def process_problem_iphone(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.PROBLEM_IPHONE)
+   # Android
    @router.callback_query(F.data == Screen.ANDROID)
    async def process_android(callback_query: types.CallbackQuery):
       await go_to(callback_query, Screen.ANDROID)
-   # 2.2.1. Инструкция - Android - Проблемы
-   @router.callback_query(F.data == Screen.PROBLEMS_ANDROID)
-   async def process_problems_android(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.PROBLEMS_ANDROID)
-   # 2.2.1.1 Инструкция - Android - Проблемы - Подключения нет
-   @router.callback_query(F.data == Screen.NO_CONNECTION_ANDROID)
-   async def process_no_connection_android(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.NO_CONNECTION_ANDROID)
-   # 2.2.2. Инструкция - Android - 2 способ
-   @router.callback_query(F.data == Screen.SECOND_METHOD_ANDROID)
-   async def process_second_method_android(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.SECOND_METHOD_ANDROID)
-
-   # 2.3. Инструкция - Windows
-   @router.callback_query(F.data == Screen.WINDOWS)
-   async def process_windows(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.WINDOWS)
-   # 2.3.1. Инструкция - Windows - избранные приложения
-   @router.callback_query(F.data == Screen.PC_APPS)
-   async def process_pc_apps(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.PC_APPS)
-
-   # 2.4. Инструкция - TV
-   @router.callback_query(F.data == Screen.TV)
-   async def process_tv(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.TV)
-   # 2.4.1. Инструкция - Android TV
-   @router.callback_query(F.data == Screen.ANDROID_TV)
-   async def process_android_tv(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.ANDROID_TV)
-   # 2.4.2. Инструкция - Apple TV
-   @router.callback_query(F.data == Screen.APPLE_TV)
-   async def process_apple_tv(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.APPLE_TV)
-
-   # 2.5. Инструкция - Huawei
+   @router.callback_query(F.data == Screen.PROBLEM_ANDROID)
+   async def process_problem_android(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.PROBLEM_ANDROID)
+   # Huawei
    @router.callback_query(F.data == Screen.HUAWEI)
    async def process_huawei(callback_query: types.CallbackQuery):
       await go_to(callback_query, Screen.HUAWEI)
-   # 2.5.2. Инструкция - Huawei - 2 способ
-   @router.callback_query(F.data == Screen.SECOND_METHOD_HUAWEI)
-   async def process_second_method_huawei(callback_query: types.CallbackQuery):
-      await go_to(callback_query, Screen.SECOND_METHOD_HUAWEI)
+   @router.callback_query(F.data == Screen.PROBLEM_HUAWEI)
+   async def process_problem_huawei(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.PROBLEM_HUAWEI)
+
+   # ПК
+   @router.callback_query(F.data == Screen.COMPUTER)
+   async def process_computer(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.COMPUTER)
+   @router.callback_query(F.data == Screen.PROBLEM_COMPUTER)
+   async def process_problem_computer(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.PROBLEM_COMPUTER)
+
+   # Телевизор
+   @router.callback_query(F.data == Screen.TV)
+   async def process_tv(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.TV)
+   # Apple TV
+   @router.callback_query(F.data == Screen.APPLE_TV)
+   async def process_apple_tv(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.APPLE_TV)
+   @router.callback_query(F.data == Screen.PROBLEM_APPLE_TV)
+   async def process_problem_apple_tv(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.PROBLEM_APPLE_TV)
+   # Android TV
+   @router.callback_query(F.data == Screen.ANDROID_TV)
+   async def process_android_tv(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.ANDROID_TV)
+   @router.callback_query(F.data == Screen.PROBLEM_ANDROID_TV)
+   async def process_problem_android_tv(callback_query: types.CallbackQuery):
+      await go_to(callback_query, Screen.PROBLEM_ANDROID_TV)
 
    return router

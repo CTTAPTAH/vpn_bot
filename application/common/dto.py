@@ -9,15 +9,6 @@ DTO (Data Transfer Objects), используемые для передачи д
 конкретного пользовательского экрана.
 """
 from dataclasses import dataclass
-from datetime import datetime
-
-@dataclass
-class KeyDTO:
-    """Информация о ключе пользователя. Лучше модели, так как есть название тарифа, а не его id."""
-    id: int
-    plan_name: str
-    end_at: datetime
-    is_expired: bool
 
 @dataclass
 class PlanDTO:

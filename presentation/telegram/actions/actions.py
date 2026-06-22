@@ -13,22 +13,9 @@ handler -> action -> navigation -> screen
 """
 from aiogram import types
 
-from app.container import build_uow, get_vpn_gateway_factory
+from app.container import build_uow
 from application.use_cases.accept_user_agreement import AcceptUserAgreementUseCase
-from application.use_cases.delete_key import DeleteKeyUseCase
-import presentation.telegram.callbacks.callbacks as callbacks
-import presentation.telegram.texts.alerts as alerts
 
 async def agreement_with_policy(callback_query: types.CallbackQuery) -> None:
     use_case = AcceptUserAgreementUseCase(build_uow())
     await use_case.execute(callback_query.from_user.id, callback_query.from_user.username)
-
-async def delete_key(callback_query: types.CallbackQuery, callback_data: callbacks.DeleteKeyCallback) -> str:
-    """Удаляет ключ и возвращает answer."""
-    use_case = DeleteKeyUseCase(build_uow(), get_vpn_gateway_factory())
-    result = await use_case.execute(callback_query.from_user.id, callback_data.key_id)
-
-    if result.success:
-        return alerts.KEY_DELETED
-    else:
-        return alerts.ERROR

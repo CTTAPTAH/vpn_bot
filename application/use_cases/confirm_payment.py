@@ -11,7 +11,6 @@ from application.errors.vpn_errors import (
     VpnKeyNotFoundError,
     VpnGatewayError
 )
-from application.services.server_selection import ServerSelectionService, NoAvailableServersError
 from domain.enums import PaymentProvider
 from domain.enums import AuditLevel, AuditEventType, PaymentStatus, PaymentAction
 from domain.entities.user import User
@@ -19,6 +18,7 @@ from domain.entities.payment import Payment
 from domain.entities.plan import Plan
 from domain.entities.access_key import AccessKey
 from domain.entities.server import Server
+from domain.entities.subscription import Subscription
 import core.utils as utils
 
 class ConfirmPaymentErrorType(StrEnum):
@@ -39,7 +39,7 @@ class ConfirmPaymentErrorType(StrEnum):
 class ConfirmPaymentResult:
     success: bool
     payment_action: PaymentAction | None = None
-    vless_link: str | None = None
+    sub_token: str | None = None
     tg_user_id: int | None = None
     tg_chat_id: int | None = None
     tg_message_id: int | None = None
@@ -47,30 +47,29 @@ class ConfirmPaymentResult:
 
 class ConfirmPaymentUseCase(BaseUseCase):
     """Сценарий выдачи/продления доступа при успешном платеже."""
-    def __init__(self, uow: AbstractUnitOfWork, gateway_factory: AbstractVpnGatewayFactory,
-                 selector: ServerSelectionService):
+    def __init__(self, uow: AbstractUnitOfWork, gateway_factory: AbstractVpnGatewayFactory,):
         self._uow = uow
-        self._selector = selector
         self._gateway_factory = gateway_factory
 
     @dataclass(slots=True)
     class _PrepareResult:
-        """Сохранение необходимый информации после создания ключа в БД."""
+        """Сохранение необходимый информации после создания ключей в БД."""
         success: bool
         payment_id: int | None = None
         action: PaymentAction | None = None
-        key_id: int | None = None
-        key_name: str | None = None
-        server: Server | None = None
+        sub_id: int | None = None
+        sub_token: str | None = None
+        keys: list[AccessKey] | None = None
+        servers: dict[int, Server] | None = None  # server_id -> Server
         expiry_time: datetime | None = None
         error: ConfirmPaymentErrorType | None = None
 
     @dataclass(slots=True)
     class _ProvisionResult:
-        """Сохранение необходимый информации после создания ключа на VPN сервере."""
+        """Сохранение необходимый информации после создания ключей на VPN сервере."""
         success: bool
+        vless_links: dict[int, str] | None = None # key_id -> vless_link
         error: ConfirmPaymentErrorType | None = None
-        vless_link: str | None = None
 
     async def execute(self, provider: PaymentProvider, payment_provider_id: str) -> ConfirmPaymentResult:
         """Выдача доступа пользователю."""
@@ -98,22 +97,22 @@ class ConfirmPaymentUseCase(BaseUseCase):
             # Не выдаём доступ повторно
             if payment.granted_at is not None:
                 payment_ui = await uow.payment_ui_states.get_by_payment_for_update(payment.id)
-                key = await uow.keys.get_by_id(payment.key_id)
-                if key is None:
+                sub = await uow.sub.get_by_id(payment.sub_id)
+                if sub is None:
                     await self._audit(
                         uow,
                         AuditLevel.ERROR,
-                        AuditEventType.KEY_NOT_FOUND_IN_DB,
+                        AuditEventType.SUB_NOT_FOUND_IN_DB,
                         f"[ConfirmPaymentUseCase][execute].\n"
-                        f"Ключ не найден в БД по id платежа.\n"
-                        f"tg_id={user.tg_id}, payment_id={payment.id}, key_id={payment.key_id}."
+                        f"Подписка не найдена в БД по id платежа.\n"
+                        f"tg_id={user.tg_id}, payment_id={payment.id}, sub_id={payment.sub_id}."
                     )
                     return ConfirmPaymentResult(success=False, error=ConfirmPaymentErrorType.KEY_NOT_FOUND)
 
                 return ConfirmPaymentResult(
                     success=True,
                     payment_action=payment.action,
-                    vless_link=key.vless_link,
+                    sub_token=sub.sub_token,
                     tg_user_id=payment_ui.tg_user_id,
                     tg_chat_id=payment_ui.tg_chat_id,
                     tg_message_id=payment_ui.tg_message_id
@@ -131,35 +130,34 @@ class ConfirmPaymentUseCase(BaseUseCase):
                 )
                 return ConfirmPaymentResult(success=False, error=ConfirmPaymentErrorType.PLAN_NOT_FOUND)
 
-            # Сначала создаём ключ В БД в первой транзакции
+            # Сначала создаём подписку В БД в первой транзакции
             if payment.action == PaymentAction.CREATE:
                 prepare = await self._prepare_purchase(uow, user, plan, payment)
 
             elif payment.action == PaymentAction.RENEW:
-                prepare = await self._prepare_renew(uow, payment, user, plan, payment.key_id, user.tg_id)
+                prepare = await self._prepare_renew(uow, payment, user, plan, payment.sub_id, user.tg_id)
 
             if not prepare.success:
                 await self._fail_payment(payment.id)
                 return ConfirmPaymentResult(success=False, error=prepare.error)
 
-        # Потом создаём ключ на VPN сервере вне транзакции. И завершаем платёж внутри второй транзакции
+        # Потом создаём ключи на VPN сервере вне транзакции. И завершаем платёж внутри второй транзакции
         if prepare.action == PaymentAction.CREATE:
-            provision = await self._provision_purchase(prepare.key_id, prepare.payment_id, prepare.server,
-                                                              prepare.expiry_time, prepare.key_name, user.tg_id)
+            provision = await self._provision_purchase(prepare, user.tg_id)
             if not provision.success:
                 await self._fail_payment(payment.id)
                 return ConfirmPaymentResult(success=False, error=provision.error)
 
-            return await self._finalize_purchase(prepare.key_id, prepare.payment_id, provision.vless_link)
+            return await self._finalize_purchase(provision.vless_links, prepare.payment_id,
+                                                 prepare.sub_id, prepare.sub_token)
 
         elif prepare.action == PaymentAction.RENEW:
-            provision = await self._provision_renew(prepare.key_id, prepare.payment_id, prepare.server,
-                                                    prepare.expiry_time, user.tg_id)
+            provision = await self._provision_renew(prepare, user.tg_id)
             if not provision.success:
                 await self._fail_payment(payment.id)
                 return ConfirmPaymentResult(success=False, error=provision.error)
 
-            return await self._finalize_renew(payment.id, payment.key_id)
+            return await self._finalize_renew(prepare.payment_id, prepare.sub_id, prepare.sub_token)
 
         else:
             await self._fail_payment(payment.id)
@@ -196,7 +194,7 @@ class ConfirmPaymentUseCase(BaseUseCase):
     # Оплата
     async def _prepare_purchase(self, uow: AbstractUnitOfWork, user: User,
                                 plan: Plan, payment: Payment) -> _PrepareResult:
-        """Создание ключа в БД. Установить статус платежа на PROCESSING."""
+        """Создание подписки и ключей в БД. Установить статус платежа на PROCESSING."""
         # Если уже обрабатывается действие
         if payment.status != PaymentStatus.PENDING:
             await self.is_processing_audit(uow, user.tg_id, payment.id)
@@ -206,119 +204,111 @@ class ConfirmPaymentUseCase(BaseUseCase):
         payment.status = PaymentStatus.PROCESSING
         await uow.payments.update(payment)
 
-        # Выбираем север
-        server_ids = await uow.servers.get_id_active_servers()
-        try:
-            server_id = await self._selector.select_server(uow.keys, server_ids)
-        except NoAvailableServersError:
-            await self._audit(
-                uow,
-                AuditLevel.ERROR,
-                AuditEventType.NO_AVAILABLE_SERVERS,
-                f"[ConfirmPaymentUseCase][_prepare_purchase]\n"
-                f"Не удалось получить сервер, где будет располагаться ключ.\n"
-                f"server_ids={server_ids}, tg_id={user.tg_id}, payment={payment.id}."
-            )
-            return self._PrepareResult(success=False, error=ConfirmPaymentErrorType.NO_AVAILABLE_SERVERS)
-        server = await uow.servers.get_by_id(server_id)
-
-        if server is None:
-            await self._audit(
-                uow,
-                AuditLevel.ERROR,
-                AuditEventType.SERVER_NOT_FOUND,
-                f"[ConfirmPaymentUseCase][_prepare_purchase]\n"
-                f"Сервер на найден в БД.\n"
-                f"server_id={server_id}, tg_id={user.tg_id}, payment={payment.id}."
-            )
-            return self._PrepareResult(success=False, error=ConfirmPaymentErrorType.SERVER_NOT_FOUND)
-
+        # Создание подписки
         expiry_time = utils.add_seconds_to_now(plan.duration_seconds)
-        key = AccessKey(
+        sub = Subscription(
             user_id=user.id,
             plan_id=plan.id,
-            server_id=server_id,
             end_at=expiry_time
         )
-        await uow.keys.add(key)
+        await uow.sub.add(sub)
+
+        # Создаём ключи на всех серверах
+        servers = await uow.servers.get_active_servers()
+
+        keys = []
+        for server in servers:
+            key = AccessKey(
+                sub_id=sub.id,
+                server_id=server.id,
+                vless_link=""
+            )
+            await uow.keys.add(key)
+            keys.append(key)
+        servers_map = {server.id: server for server in servers}
 
         return self._PrepareResult(
             success=True,
             payment_id=payment.id,
             action=payment.action,
-            key_id=key.id,
-            key_name=server.default_key_name,
-            server=server,
+            sub_id=sub.id,
+            sub_token=sub.sub_token,
+            keys=keys,
+            servers=servers_map,
             expiry_time=expiry_time
         )
 
-    async def _provision_purchase(self, key_id: int, payment_id: int, server: Server,
-                                  expiry_time: datetime, key_name: str, tg_id: int) -> _ProvisionResult:
+    async def _provision_purchase(self, prepare: _PrepareResult, tg_id: int) -> _ProvisionResult:
+        vless_links_map = {}
+        for key in prepare.keys:
+            server = prepare.servers[key.server_id]
+            vpn = await self._gateway_factory.get_gateway(server)
+            vpn_email = str(key.id)
+            try:
+                await vpn.create_key(vpn_email, prepare.expiry_time)
+                vless_link = await vpn.get_link(vpn_email, server.default_key_name)
+                vless_links_map[key.id] = vless_link
 
-        vpn = await self._gateway_factory.get_gateway(server)
-        vpn_email = str(key_id)
-        try:
-            await vpn.create_key(vpn_email, expiry_time)
-            vless_link = await vpn.get_link(vpn_email, key_name)
+            except VpnClientAlreadyExistsError:
+                async with self._uow as uow:
+                    await self._audit(
+                        uow,
+                        AuditLevel.ERROR,
+                        AuditEventType.VPN_KEY_CREATED,
+                        f"[ConfirmPaymentUseCase][_provision_purchase]\n"
+                        f"Ключ с таким email уже существует на vpn сервере.\n"
+                        f"tg_id={tg_id}, sub_id={prepare.sub_id}, payment_id={prepare.payment_id}."
+                    )
+                return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.KEY_ALREADY_EXISTS)
 
-        except VpnClientAlreadyExistsError:
-            async with self._uow as uow:
-                await self._audit(
-                    uow,
-                    AuditLevel.ERROR,
-                    AuditEventType.VPN_KEY_CREATED,
-                    f"[ConfirmPaymentUseCase][_provision_purchase]\n"
-                    f"Ключ с таким email уже есть в vpn.\n"
-                    f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}."
-                )
-            return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.KEY_ALREADY_EXISTS)
+            except VpnKeyNotFoundError:
+                async with self._uow as uow:
+                    await self._audit(
+                        uow,
+                        AuditLevel.ERROR,
+                        AuditEventType.VPN_KEY_CREATED,
+                        f"[ConfirmPaymentUseCase][_provision_purchase]\n"
+                        f"Ключ не найден на сервере.\n"
+                        f"tg_id={tg_id}, sub_id={prepare.sub_id}, payment_id={prepare.payment_id}."
+                    )
+                return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.KEY_NOT_FOUND)
 
-        except VpnKeyNotFoundError:
-            async with self._uow as uow:
-                await self._audit(
-                    uow,
-                    AuditLevel.ERROR,
-                    AuditEventType.VPN_KEY_CREATED,
-                    f"[ConfirmPaymentUseCase][_provision_purchase]\n"
-                    f"Ключ не найден на сервере.\n"
-                    f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}."
-                )
-            return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.KEY_NOT_FOUND)
+            except VpnGatewayError as e:
+                async with self._uow as uow:
+                    await self._audit(
+                        uow,
+                        AuditLevel.ERROR,
+                        AuditEventType.VPN_ERROR,
+                        f"[ConfirmPaymentUseCase][_provision_purchase]\n"
+                        f"Неизвестная ошибка при взаимодействии с сервером.\n"
+                        f"tg_id={tg_id}, sub_id={prepare.sub_id}, payment_id={prepare.payment_id}.\n"
+                        f"Ошибка: {e}."
+                    )
+                return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.UNKNOWN_ERROR)
 
-        except VpnGatewayError as e:
-            async with self._uow as uow:
-                await self._audit(
-                    uow,
-                    AuditLevel.ERROR,
-                    AuditEventType.VPN_ERROR,
-                    f"[ConfirmPaymentUseCase][_provision_purchase]\n"
-                    f"Неизвестная ошибка при взаимодействии с сервером.\n"
-                    f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}.\n"
-                    f"Ошибка: {e}."
-                )
-            return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.UNKNOWN_ERROR)
+        return self._ProvisionResult(success=True, vless_links=vless_links_map)
 
-        return self._ProvisionResult(success=True, vless_link=vless_link)
-
-    async def _finalize_purchase(self, key_id: int, payment_id: int, vless_link: str) -> ConfirmPaymentResult:
-        """Добавляем vless ссылку к ключу и фиксируем платёж."""
+    async def _finalize_purchase(self, vless_links: dict[int, str], payment_id: int, sub_id: int,
+                                 sub_token: str) -> ConfirmPaymentResult:
+        """Добавляем vless ссылки к ключам и фиксируем платёж."""
         async with self._uow as uow:
-            # Добавляем vless ссылку
             payment = await uow.payments.get_for_update(payment_id)
-            key = await uow.keys.get_for_update(key_id)
 
-            key.vless_link = vless_link
-            await uow.keys.update(key)
+            # Добавляем vless ссылки всем созданным ключам
+            for key_id, vless_link in vless_links.items():
+                key = await uow.keys.get_for_update(key_id)
+
+                key.vless_link = vless_link
+                await uow.keys.update(key)
 
             # Фиксируем платёж
-            await self._finalize_payment(uow, payment, key.id)
-
+            await self._finalize_payment(uow, payment, sub_id)
             payment_ui = await uow.payment_ui_states.get_by_payment_for_update(payment.id)
 
             return ConfirmPaymentResult(
                 success=True,
                 payment_action=payment.action,
-                vless_link=vless_link,
+                sub_token=sub_token,
                 tg_user_id=payment_ui.tg_user_id,
                 tg_chat_id=payment_ui.tg_chat_id,
                 tg_message_id=payment_ui.tg_message_id
@@ -326,7 +316,7 @@ class ConfirmPaymentUseCase(BaseUseCase):
 
     # Продление доступа
     async def _prepare_renew(self, uow: AbstractUnitOfWork, payment: Payment, user: User,
-                             plan: Plan, key_id: int | None, tg_id: int) -> _PrepareResult:
+                             plan: Plan, sub_id: int | None, tg_id: int) -> _PrepareResult:
         # Если уже обрабатывается действие
         if payment.status != PaymentStatus.PENDING:
             await self.is_processing_audit(uow, user.tg_id, payment.id)
@@ -336,69 +326,63 @@ class ConfirmPaymentUseCase(BaseUseCase):
         payment.status = PaymentStatus.PROCESSING
         await uow.payments.update(payment)
 
-        # Проверка, что ключ не None
-        validate_error = await self._validate_key_id(uow, key_id, tg_id, payment.id)
+        # Проверка, что подписка не None
+        validate_error = await self._validate_sub_id(uow, sub_id, tg_id, payment.id)
         if validate_error:
             return self._PrepareResult(success=False, error=validate_error)
 
-        # Получаем ключ из БД
-        key = await uow.keys.get_for_update(key_id)
-        if key is None:
+        # Получаем подписку из БД
+        sub = await uow.sub.get_for_update(sub_id)
+        if sub is None:
             await self._audit(
                 uow,
                 AuditLevel.ERROR,
                 AuditEventType.KEY_NOT_FOUND_IN_DB,
                 f"[ConfirmPaymentUseCase][_prepare_renew]\n"
-                f"Ключ для продления не найден.\n"
-                f"tg_id={tg_id}, key_id={key_id}, payment_id={payment.id}."
+                f"Подписка для продления не найден.\n"
+                f"tg_id={tg_id}, sub_id={sub_id}, payment_id={payment.id}."
             )
             return self._PrepareResult(success=False, error=ConfirmPaymentErrorType.KEY_NOT_FOUND)
 
-        if key.user_id != user.id:
+        if sub.user_id != user.id:
             await self._audit(
                 uow,
                 AuditLevel.ERROR,
                 AuditEventType.KEY_NOT_OWNED_BY_USER,
                 f"[ConfirmPaymentUseCase][_prepare_renew]\n"
-                f"Попытка продлить чужой ключ.\n"
-                f"user_id={user.id}, key_user_id={key.user_id}, key_id={key.id}, payment_id={payment.id}."
+                f"Попытка продлить чужую подписку.\n"
+                f"user_id={user.id}, sub_user_id={sub.user_id}, sub_id={sub.id}, payment_id={payment.id}."
             )
             return self._PrepareResult(success=False, error=ConfirmPaymentErrorType.KEY_NOT_FOUND)
 
-        # Получаем сервер
-        server = await uow.servers.get_by_id(key.server_id)
+        # Обновляем подписку в БД
+        await self._extend_sub_time(uow, sub, plan.duration_seconds)
 
-        if server is None:
-            await self._audit(
-                uow,
-                AuditLevel.ERROR,
-                AuditEventType.SERVER_NOT_FOUND,
-                f"[ConfirmPaymentUseCase][_prepare_renew]\n"
-                f"Во время выдачи доступа после оплаты не удалось найти сервер в БД.\n"
-                f"server_id={key.server_id}, tg_id={tg_id}."
-            )
-            return self._PrepareResult(success=False, error=ConfirmPaymentErrorType.SERVER_NOT_FOUND)
-
-        # Обновляем ключ в БД
-        await self._extend_key_time(uow, key, plan.duration_seconds)
+        # Получаем все сервера
+        keys = await uow.keys.list_by_sub(sub_id)
+        server_ids = [key.server_id for key in keys]
+        servers = await uow.servers.get_by_ids(server_ids)
+        servers_map = {server.id: server for server in servers}
 
         return self._PrepareResult(
             success=True,
             payment_id=payment.id,
             action=payment.action,
-            key_id=key.id,
-            server=server,
-            expiry_time=key.end_at
+            sub_id=sub.id,
+            sub_token=sub.sub_token,
+            keys=keys,
+            servers=servers_map,
+            expiry_time=sub.end_at
         )
 
-    async def _validate_key_id(self, uow: AbstractUnitOfWork, key_id: int | None,
+    async def _validate_sub_id(self, uow: AbstractUnitOfWork, sub_id: int | None,
                                tg_id: int, payment_id: int) -> ConfirmPaymentErrorType | None:
-        if key_id is None:
+        if sub_id is None:
             await self._audit(
                 uow,
                 AuditLevel.ERROR,
                 AuditEventType.SYSTEM_ERROR,
-                f"[ConfirmPaymentUseCase][_validate_key_id]\n"
+                f"[ConfirmPaymentUseCase][_validate_sub_id]\n"
                 f"Не удалось продлить ключ. ID ключа не был передан в функцию.\n"
                 f"tg_id={tg_id}, payment_id={payment_id}."
             )
@@ -406,83 +390,73 @@ class ConfirmPaymentUseCase(BaseUseCase):
 
         return None
 
-    async def _extend_key_time(self, uow: AbstractUnitOfWork, key: AccessKey, duration_seconds: int) -> None:
+    async def _extend_sub_time(self, uow: AbstractUnitOfWork, sub: Subscription, duration_seconds: int) -> None:
         now = utils.utcnow()
-        if key.end_at > now:
-            base_time = key.end_at
+        if sub.end_at > now:
+            base_time = sub.end_at
         else:
             base_time = now
         expiry_time = base_time + timedelta(seconds=duration_seconds)
-        key.end_at = expiry_time
-        await uow.keys.update(key)
+        sub.end_at = expiry_time
+        await uow.sub.update(sub)
 
-    async def _provision_renew(self, key_id: int, payment_id: int, server: Server,
-                               expiry_time: datetime, tg_id: int) -> _ProvisionResult:
-        vpn = await self._gateway_factory.get_gateway(server)
+    async def _provision_renew(self, prepare: _PrepareResult, tg_id: int) -> _ProvisionResult:
+        for key in prepare.keys:
+            server = prepare.servers[key.server_id]
+            vpn = await self._gateway_factory.get_gateway(server)
 
-        try:
-            await vpn.update_expiry(str(key_id), expiry_time)
-        except VpnClientAlreadyExistsError:
-            async with self._uow as uow:
-                await self._audit(
-                    uow,
-                    AuditLevel.ERROR,
-                    AuditEventType.VPN_KEY_UPDATED,
-                    f"[ConfirmPaymentUseCase][_provision_renew]\n"
-                    f"Ключ уже существует на VPN сервере.\n"
-                    f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}."
-                )
+            try:
+                await vpn.update_expiry(str(key.id), prepare.expiry_time)
+            except VpnKeyNotFoundError:
+                async with self._uow as uow:
+                    await self._audit(
+                        uow,
+                        AuditLevel.ERROR,
+                        AuditEventType.VPN_KEY_UPDATED,
+                        f"[ConfirmPaymentUseCase][_provision_renew]\n"
+                        f"Подписка не найдена.\n"
+                        f"tg_id={tg_id}, sub_id={prepare.sub_id}, payment_id={prepare.payment_id}."
+                    )
                 return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.KEY_NOT_FOUND)
-        except VpnGatewayError as e:
-            async with self._uow as uow:
-                await self._audit(
-                    uow,
-                    AuditLevel.ERROR,
-                    AuditEventType.VPN_ERROR,
-                    f"[ConfirmPaymentUseCase][_provision_renew]\n"
-                    f"Неизвестная ошибка.\n"
-                    f"tg_id={tg_id}, key_id={key_id}, payment_id={payment_id}.\n"
-                    f"Ошибка: {e}."
-                )
-            return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.UNKNOWN_ERROR)
+            except VpnGatewayError as e:
+                async with self._uow as uow:
+                    await self._audit(
+                        uow,
+                        AuditLevel.ERROR,
+                        AuditEventType.VPN_ERROR,
+                        f"[ConfirmPaymentUseCase][_provision_renew]\n"
+                        f"Неизвестная ошибка.\n"
+                        f"tg_id={tg_id}, sub_id={prepare.sub_id}, payment_id={prepare.payment_id}.\n"
+                        f"Ошибка: {e}."
+                    )
+                return self._ProvisionResult(success=False, error=ConfirmPaymentErrorType.UNKNOWN_ERROR)
 
         return self._ProvisionResult(success=True)
 
-    async def _finalize_renew(self, payment_id: int, key_id: int) -> ConfirmPaymentResult:
+    async def _finalize_renew(self, payment_id: int, sub_id: int, sub_token: str) -> ConfirmPaymentResult:
         """Продление доступа."""
         # Фиксируем платёж и доступ
         async with self._uow as uow:
             payment = await uow.payments.get_for_update(payment_id)
-            await self._finalize_payment(uow, payment, key_id)
+            await self._finalize_payment(uow, payment, sub_id)
 
             payment_ui = await uow.payment_ui_states.get_by_payment_for_update(payment.id)
-            key = await uow.keys.get_by_id(payment.key_id)
-            if key is None:
-                await self._audit(
-                    uow,
-                    AuditLevel.ERROR,
-                    AuditEventType.KEY_NOT_FOUND_IN_DB,
-                    f"[ConfirmPaymentUseCase][execute].\n"
-                    f"Ключ не найден в БД по id платежа.\n"
-                    f"payment_id={payment.id}, key_id={payment.key_id}."
-                )
-                return ConfirmPaymentResult(success=False, error=ConfirmPaymentErrorType.KEY_NOT_FOUND)
 
             return ConfirmPaymentResult(
                 success=True,
                 payment_action=payment.action,
-                vless_link=key.vless_link,
+                sub_token=sub_token,
                 tg_user_id=payment_ui.tg_user_id,
                 tg_chat_id=payment_ui.tg_chat_id,
                 tg_message_id=payment_ui.tg_message_id
             )
 
-    async def _finalize_payment(self, uow: AbstractUnitOfWork, payment: Payment, key_id: int):
+    async def _finalize_payment(self, uow: AbstractUnitOfWork, payment: Payment, sub_id: int):
         """Фиксация платежа после покупки или продления."""
         now = utils.utcnow()
         payment.status = PaymentStatus.CONFIRMED
         payment.paid_at = now
-        payment.key_id = key_id
+        payment.sub_id = sub_id
         payment.granted_at = now
         await uow.payments.update(payment)
 

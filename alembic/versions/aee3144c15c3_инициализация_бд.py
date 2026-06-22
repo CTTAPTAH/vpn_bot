@@ -1,8 +1,8 @@
-"""Инициализация БД
+"""Инициализация Бд
 
-Revision ID: affa11fb656e
+Revision ID: aee3144c15c3
 Revises: 
-Create Date: 2026-05-29 12:18:42.448687
+Create Date: 2026-06-05 12:24:46.496513
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'affa11fb656e'
+revision: str = 'aee3144c15c3'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.create_table('audit_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('level', sa.Enum('INFO', 'WARNING', 'ERROR', name='auditlevel', native_enum=False), nullable=False, comment='Уровень лога: INFO, WARNING, ERROR.'),
-    sa.Column('event_type', sa.Enum('PAYMENT_CREATED', 'PAYMENT_FAILED', 'PAYMENT_CANCELLED', 'PAYMENT_COMPLETED', 'PAYMENT_NOT_FOUND', 'PAYMENT_UI_NOT_FOUND', 'PAYMENT_NOT_OWNED_BY_USER', 'EMPTY_PAYMENT_LINK', 'ACCESS_GRANTED', 'ACCESS_REVOKED', 'VPN_KEY_CREATED', 'VPN_KEY_UPDATED', 'VPN_KEY_FETCHED', 'VPN_KEY_DELETED', 'TRIAL_ALREADY_GRANTED', 'TRIAL_GRANTED', 'NO_AVAILABLE_SERVERS', 'SERVER_NOT_FOUND', 'IS_PROCESSING', 'USER_NOT_FOUND', 'MESSAGE_NOT_FOUND', 'TICKET_NOT_FOUND', 'KEY_CANCELLED', 'KEY_NOT_FOUND_IN_DB', 'KEY_NOT_FOUND_IN_VPN', 'KEY_NOT_OWNED_BY_USER', 'KEY_LIMIT', 'PLAN_NOT_FOUND', 'PAYING_OTHER', 'ADMIN_ACTION', 'DB_ERROR', 'VPN_ERROR', 'PAYMENT_PROVIDER_ERROR', 'UNEXPECTED_ERROR', 'SYSTEM_ERROR', name='auditeventtype', native_enum=False), nullable=False, comment='Тип бизнес-события (PAYMENT_COMPLETED, ACCESS_GRANTED и т.д.).'),
+    sa.Column('event_type', sa.Enum('PAYMENT_CREATED', 'PAYMENT_FAILED', 'PAYMENT_CANCELLED', 'PAYMENT_COMPLETED', 'PAYMENT_NOT_FOUND', 'PAYMENT_UI_NOT_FOUND', 'PAYMENT_NOT_OWNED_BY_USER', 'EMPTY_PAYMENT_LINK', 'ACCESS_GRANTED', 'ACCESS_REVOKED', 'VPN_KEY_CREATED', 'VPN_KEY_UPDATED', 'VPN_KEY_FETCHED', 'VPN_KEY_DELETED', 'TRIAL_ALREADY_GRANTED', 'TRIAL_GRANTED', 'NO_AVAILABLE_SERVERS', 'SERVER_NOT_FOUND', 'IS_PROCESSING', 'USER_NOT_FOUND', 'MESSAGE_NOT_FOUND', 'TICKET_NOT_FOUND', 'SUB_NOT_FOUND_IN_DB', 'KEY_CANCELLED', 'KEY_NOT_FOUND_IN_DB', 'KEY_NOT_FOUND_IN_VPN', 'KEY_NOT_OWNED_BY_USER', 'KEY_LIMIT', 'PLAN_NOT_FOUND', 'PAYING_OTHER', 'ADMIN_ACTION', 'DB_ERROR', 'VPN_ERROR', 'PAYMENT_PROVIDER_ERROR', 'UNEXPECTED_ERROR', 'SYSTEM_ERROR', name='auditeventtype', native_enum=False), nullable=False, comment='Тип бизнес-события (PAYMENT_COMPLETED, ACCESS_GRANTED и т.д.).'),
     sa.Column('message', sa.String(length=500), nullable=False, comment='Основное сообщение лога.'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Дата и время создания лога.'),
     sa.PrimaryKeyConstraint('id')
@@ -60,10 +60,8 @@ def upgrade() -> None:
     sa.Column('inbound_id', sa.Integer(), nullable=False, comment='id inbound, в котором хранятся ключи.'),
     sa.Column('inbound_name', sa.String(length=50), nullable=True, comment='Название inbound, в котором хранятся ключи. Не является источником истины.'),
     sa.Column('default_key_name', sa.String(length=50), nullable=True, comment='Название ключа по умолчанию.'),
-    sa.Column('max_clients', sa.Integer(), nullable=False, comment='Лимит на количество ключей на сервере.'),
     sa.Column('is_active', sa.Boolean(), server_default=sa.text('true'), nullable=False, comment='Активен ли сервер.'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Время создания сервера в базе данных.'),
-    sa.CheckConstraint('max_clients > 0', name='ck_servers_price_positive'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
@@ -80,24 +78,22 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_users_is_blocked'), 'users', ['is_blocked'], unique=False)
     op.create_index(op.f('ix_users_tg_id'), 'users', ['tg_id'], unique=True)
-    op.create_table('access_keys',
+    op.create_table('subscriptions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False, comment='id пользователя, у которого есть эта подписка.'),
     sa.Column('plan_id', sa.Integer(), nullable=False, comment='id тарифа, на который подписался пользователь.'),
-    sa.Column('server_id', sa.Integer(), nullable=False, comment='id сервера, на котором расположен ключ'),
+    sa.Column('sub_token', sa.String(length=32), nullable=False, comment='Уникальный токен для subscription URL.'),
     sa.Column('start_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Дата получение подписки пользователем.'),
     sa.Column('end_at', sa.DateTime(timezone=True), nullable=False, comment='Дата окончания подписки пользователя.'),
-    sa.Column('vless_link', sa.String(length=500), nullable=True, comment='vless ссылка ключа. Важен как кэш, чтобы уменьшить количество запросов к xui.'),
-    sa.CheckConstraint('end_at >= start_at', name='ck_access_keys_end_after_start'),
+    sa.CheckConstraint('end_at >= start_at', name='ck_subscriptions_end_after_start'),
     sa.ForeignKeyConstraint(['plan_id'], ['plans.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['server_id'], ['servers.id'], ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_access_keys_end_at'), 'access_keys', ['end_at'], unique=False)
-    op.create_index(op.f('ix_access_keys_plan_id'), 'access_keys', ['plan_id'], unique=False)
-    op.create_index(op.f('ix_access_keys_server_id'), 'access_keys', ['server_id'], unique=False)
-    op.create_index(op.f('ix_access_keys_user_id'), 'access_keys', ['user_id'], unique=False)
+    op.create_index(op.f('ix_subscriptions_end_at'), 'subscriptions', ['end_at'], unique=False)
+    op.create_index(op.f('ix_subscriptions_plan_id'), 'subscriptions', ['plan_id'], unique=False)
+    op.create_index(op.f('ix_subscriptions_sub_token'), 'subscriptions', ['sub_token'], unique=True)
+    op.create_index(op.f('ix_subscriptions_user_id'), 'subscriptions', ['user_id'], unique=True)
     op.create_table('tickets',
     sa.Column('id', sa.Integer(), nullable=False, comment='Уникальный идентификатор обращения в поддержку (PK).'),
     sa.Column('user_id', sa.Integer(), nullable=False, comment='id пользователя, который отправил это обращение.'),
@@ -113,6 +109,17 @@ def upgrade() -> None:
     op.create_index(op.f('ix_tickets_thread_id'), 'tickets', ['thread_id'], unique=True)
     op.create_index(op.f('ix_tickets_user_id'), 'tickets', ['user_id'], unique=False)
     op.create_index('uq_ticket_user_single_open', 'tickets', ['user_id'], unique=True, postgresql_where=sa.text("status = 'OPEN'"))
+    op.create_table('access_keys',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('sub_id', sa.Integer(), nullable=False, comment='id подписки, в которую входит ключ.'),
+    sa.Column('server_id', sa.Integer(), nullable=False, comment='id сервера, на котором расположен ключ.'),
+    sa.Column('vless_link', sa.String(length=500), nullable=False, comment='vless ссылка ключа. Важен как кэш, чтобы уменьшить количество запросов к xui.'),
+    sa.ForeignKeyConstraint(['server_id'], ['servers.id'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['sub_id'], ['subscriptions.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_access_keys_server_id'), 'access_keys', ['server_id'], unique=False)
+    op.create_index(op.f('ix_access_keys_sub_id'), 'access_keys', ['sub_id'], unique=False)
     op.create_table('messages',
     sa.Column('id', sa.Integer(), nullable=False, comment='Уникальный идентификатор сообщения в поддержку (PK).'),
     sa.Column('ticket_id', sa.Integer(), nullable=False, comment='id обращения в поддержку.'),
@@ -129,7 +136,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False, comment='Пользователь, совершивший платеж.'),
     sa.Column('plan_id', sa.Integer(), nullable=False, comment='Тариф, за который был произведён платеж.'),
-    sa.Column('key_id', sa.Integer(), nullable=True, comment='Связь с подпиской/ключом, который был выдан по этому платежу.'),
+    sa.Column('sub_id', sa.Integer(), nullable=True, comment='Связь с подпиской, который был выдан по этому платежу.'),
     sa.Column('price', sa.Integer(), nullable=False, comment='Сумма платежа.'),
     sa.Column('payment_method', sa.Integer(), nullable=True, comment='Способ оплаты (enum PaymentMethod)'),
     sa.Column('type', sa.Enum('PURCHASE', 'TRIAL', name='paymenttype', native_enum=False), nullable=False, comment='Тип платежа (покупка, пробный период).'),
@@ -142,17 +149,17 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Время создания записи платежа.'),
     sa.Column('paid_at', sa.DateTime(timezone=True), nullable=True, comment='Время подтверждённого платежа.'),
     sa.CheckConstraint('price >= 0', name='ck_payments_price_positive'),
-    sa.ForeignKeyConstraint(['key_id'], ['access_keys.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['plan_id'], ['plans.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['sub_id'], ['subscriptions.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('provider', 'provider_payment_id', name='uq_provider_payment_id')
     )
     op.create_index(op.f('ix_payments_action'), 'payments', ['action'], unique=False)
     op.create_index(op.f('ix_payments_created_at'), 'payments', ['created_at'], unique=False)
-    op.create_index(op.f('ix_payments_key_id'), 'payments', ['key_id'], unique=False)
     op.create_index(op.f('ix_payments_plan_id'), 'payments', ['plan_id'], unique=False)
     op.create_index(op.f('ix_payments_status'), 'payments', ['status'], unique=False)
+    op.create_index(op.f('ix_payments_sub_id'), 'payments', ['sub_id'], unique=False)
     op.create_index(op.f('ix_payments_type'), 'payments', ['type'], unique=False)
     op.create_index(op.f('ix_payments_user_id'), 'payments', ['user_id'], unique=False)
     op.create_index('uq_user_pending_once', 'payments', ['user_id'], unique=True, postgresql_where=sa.text("status = 'PENDING'"))
@@ -179,9 +186,9 @@ def downgrade() -> None:
     op.drop_index('uq_user_pending_once', table_name='payments', postgresql_where=sa.text("status = 'PENDING'"))
     op.drop_index(op.f('ix_payments_user_id'), table_name='payments')
     op.drop_index(op.f('ix_payments_type'), table_name='payments')
+    op.drop_index(op.f('ix_payments_sub_id'), table_name='payments')
     op.drop_index(op.f('ix_payments_status'), table_name='payments')
     op.drop_index(op.f('ix_payments_plan_id'), table_name='payments')
-    op.drop_index(op.f('ix_payments_key_id'), table_name='payments')
     op.drop_index(op.f('ix_payments_created_at'), table_name='payments')
     op.drop_index(op.f('ix_payments_action'), table_name='payments')
     op.drop_table('payments')
@@ -189,16 +196,19 @@ def downgrade() -> None:
     op.drop_index('ix_messages_ticket_created', table_name='messages')
     op.drop_index(op.f('ix_messages_created_at'), table_name='messages')
     op.drop_table('messages')
+    op.drop_index(op.f('ix_access_keys_sub_id'), table_name='access_keys')
+    op.drop_index(op.f('ix_access_keys_server_id'), table_name='access_keys')
+    op.drop_table('access_keys')
     op.drop_index('uq_ticket_user_single_open', table_name='tickets', postgresql_where=sa.text("status = 'OPEN'"))
     op.drop_index(op.f('ix_tickets_user_id'), table_name='tickets')
     op.drop_index(op.f('ix_tickets_thread_id'), table_name='tickets')
     op.drop_index(op.f('ix_tickets_created_at'), table_name='tickets')
     op.drop_table('tickets')
-    op.drop_index(op.f('ix_access_keys_user_id'), table_name='access_keys')
-    op.drop_index(op.f('ix_access_keys_server_id'), table_name='access_keys')
-    op.drop_index(op.f('ix_access_keys_plan_id'), table_name='access_keys')
-    op.drop_index(op.f('ix_access_keys_end_at'), table_name='access_keys')
-    op.drop_table('access_keys')
+    op.drop_index(op.f('ix_subscriptions_user_id'), table_name='subscriptions')
+    op.drop_index(op.f('ix_subscriptions_sub_token'), table_name='subscriptions')
+    op.drop_index(op.f('ix_subscriptions_plan_id'), table_name='subscriptions')
+    op.drop_index(op.f('ix_subscriptions_end_at'), table_name='subscriptions')
+    op.drop_table('subscriptions')
     op.drop_index(op.f('ix_users_tg_id'), table_name='users')
     op.drop_index(op.f('ix_users_is_blocked'), table_name='users')
     op.drop_table('users')
