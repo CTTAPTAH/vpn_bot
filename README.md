@@ -104,6 +104,19 @@ python app/main.py
 
 Бот, бот поддержки и FastAPI сервер запускаются в одном процессе через `asyncio.gather`.
 
+## Скриншоты
+
+Ниже показан основной пользовательский сценарий работы бота.
+
+### Главное меню
+![Main menu](docs/screenshots/menu.png)
+
+### Страница подписки
+![Subscription](docs/screenshots/subscription.png)
+
+### Создание платежа
+![Payment](docs/screenshots/payment.png)
+
 ## Требования к инфраструктуре
 
 - **PostgreSQL** 14+

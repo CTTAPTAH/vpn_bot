@@ -70,7 +70,7 @@ def kb_view_agreement() -> InlineKeyboardMarkup:
 
 # Тарифы, покупка
 def kb_plans(action: enums.PaymentAction, plans: list[PlanDTO],
-             pending_payment_id: int, *, sub_id: int | None = None) -> InlineKeyboardMarkup:
+             *, sub_id: int | None = None) -> InlineKeyboardMarkup:
     buttons = []
 
     for plan in plans:
@@ -80,14 +80,6 @@ def kb_plans(action: enums.PaymentAction, plans: list[PlanDTO],
                 text=text,
                 callback_data=callbacks.PurchasePendingCallback(action=action, plan_id=plan.id, sub_id=sub_id).pack()
             )])
-    if pending_payment_id is not None:
-        buttons.append([InlineKeyboardButton(
-            text="💳 Продолжить оплату",
-            callback_data=callbacks.PurchasePendingCallback(
-                action=action,
-                plan_id=pending_payment_id,
-                sub_id=sub_id).pack()
-        )])
     buttons.append([BTN_BACK])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)

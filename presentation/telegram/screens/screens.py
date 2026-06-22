@@ -59,7 +59,6 @@ async def show_plans(callback_query: types.CallbackQuery, callback_data: callbac
         reply_markup=keyboards.kb_plans(
             action=callback_data.action,
             plans=dto.plans,
-            pending_payment_id=dto.pending_payment_id,
             sub_id=callback_data.sub_id
         )
     )

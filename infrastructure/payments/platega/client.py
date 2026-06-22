@@ -25,8 +25,15 @@ class PlategaClient(AbstractPaymentProvider):
             "X-Secret": config.PLATEGA_API_KEY
         }
 
-    def _parse_expires_in(self, value: str) -> timedelta:
-        h, m, s = map(int, value.split(":"))
+    def _parse_expires_in(self, value: str | None) -> timedelta | None:
+        if not value:
+            return None
+
+        parts = value.split(":")
+        if len(parts) != 3:
+            return None
+
+        h, m, s = map(int, parts)
         return timedelta(hours=h, minutes=m, seconds=s)
 
     async def start(self):
@@ -115,7 +122,11 @@ class PlategaClient(AbstractPaymentProvider):
 
     async def is_payment_expiring_soon(self, transaction_id: str, threshold_minutes: int) -> bool:
         status = await self.get_transaction_status(transaction_id)
-        if status is None or status.expires_in is None:
-            return True  # не знаем — считаем что истекает
+        if status is None:
+            return True
+
+        # если нет expiresIn - НЕ делаем вывод
+        if status.expires_in is None:
+            return False
 
         return status.expires_in < timedelta(minutes=threshold_minutes)
