@@ -33,6 +33,10 @@ app/ — точка входа, DI контейнер \
 
 Ключевые паттерны: Unit of Work, Repository, Gateway, Use Case.
 
+### Диаграмма зависимостей
+
+![Architecture](docs/screenshots/architecture.png)
+
 ## Установка
 
 ### 1. Клонировать репозиторий
